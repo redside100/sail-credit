@@ -7,6 +7,7 @@ CREATE TABLE parties (
     party_id INTEGER PRIMARY KEY,
     party_name TEXT,
     party_type TEXT,
+    party_size INTEGER,
     party_status TEXT,
     party_leader_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
