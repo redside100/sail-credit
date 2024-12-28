@@ -65,14 +65,17 @@ async def create_party(
         party_type_label = f"`{party.type}`"
 
     # TODO: It doesn't seem to be mentioning the role correctly.
-    content = (
-        f"<@{interaction.user.id}> has created a party for {party_type_label}!\n"
-        f"React below to join the party! NOTE: THIS IS A COMMITMENT"
-    )
+    content = f"<@{interaction.user.id}> has created a party for {party_type_label}!\n"
+    if party.description:
+        content += f"Description: `{party.description}`\n"
 
     await interaction.response.send_message(
         content=content,
-        embed=create_embed(f"<@{interaction.user.id}> created an embded message lol. "),
+        embed=create_embed(
+            f"`{party.size - 1}` spots left.\n"
+            + f"Current Party:\n"
+            + f"- <@{interaction.user.id}>"
+        ),
         view=PartyView(),
         ephemeral=False,
     )

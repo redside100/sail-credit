@@ -47,13 +47,15 @@ class PartyService:
     ) -> Party:
         # We don't want to pass None values to the Party constructor, preserving
         # the default values of the dataclass.
-        party_kwargs = {kwarg: kwargs for kwarg in kwargs if kwargs[kwarg] is not None}
+        party_kwargs = {
+            kwarg: kwargs[kwarg] for kwarg in kwargs if kwargs[kwarg] is not None
+        }
 
         # Pre-processing.
         if party_kwargs.get("name") is None:
             party_kwargs["name"] = f"{user.name}'s {type} Party"
 
-        party = Party(uuid=uuid4(), owner_id=user.id, **kwargs)
+        party = Party(uuid=uuid4(), owner_id=user.id, **party_kwargs)
         self.parties.append(party)
         return party
 
