@@ -1,14 +1,15 @@
 import functools
+from typing import Optional
 import discord
 import db
 
-"""
-A util decorator to automatically create and inject db info for a user command.
-This needs to be right above the function definition, and the function's first argument must accept a discord interaction!
-"""
-
 
 def user_command():
+    """
+    A util decorator to automatically create and inject db info for a user command.
+    This needs to be right above the function definition, and the function's first argument must accept a discord interaction!
+    """
+
     def wrapper(func):
         @functools.wraps(func)
         async def wrapped(interaction: discord.Interaction, *args, **kwargs):
@@ -24,3 +25,11 @@ def user_command():
         return wrapped
 
     return wrapper
+
+
+def create_embed(message: str, title: Optional[str] = None):
+    embed = discord.Embed(color=0xFFAE00)
+    embed.description = message
+    if title:
+        embed.title = title
+    return embed
