@@ -5,7 +5,9 @@ import discord
 from discord.ext import commands
 import db
 from party import Party, PartyService
-from util import user_command
+import config
+from util import user_command, create_embed
+from views import PartyView
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -54,7 +56,26 @@ async def create_party(
         size=size,
         description=description,
     )
-    await interaction.response.send_message(f"{party.name}", ephemeral=False)
+
+    # If the party type is supported, send out a ping to the channel.
+    role_id = config.SUPPORTED_PARTY_TYPES.get(type.upper())
+    if role_id:
+        party_type_label = f"<@&{role_id}>"
+    else:
+        party_type_label = f"`{party.type}`"
+
+    # TODO: It doesn't seem to be mentioning the role correctly.
+    content = (
+        f"<@{interaction.user.id}> has created a party for {party_type_label}!\n"
+        f"React below to join the party! NOTE: THIS IS A COMMITMENT"
+    )
+
+    await interaction.response.send_message(
+        content=content,
+        embed=create_embed(f"<@{interaction.user.id}> created an embded message lol. "),
+        view=PartyView(),
+        ephemeral=False,
+    )
 
 
 @bot.event
