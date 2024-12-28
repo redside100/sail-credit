@@ -10,3 +10,4 @@ multidict==6.1.0
 propcache==0.2.1
 typing_extensions==4.12.2
 yarl==1.18.3
+black==24.10.0
