@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
 from uuid import UUID, uuid4
@@ -13,8 +13,14 @@ class PartyStatus(Enum):
 
 class PartyMemberStatus(Enum):
     NEUTRAL = "NEUTRAL"
-    GOOD = "GOOD"
-    FLAKER = "FLAKER"
+    SHOWED_UP = "SHOWED_UP"
+    FLAKED = "FLAKED"
+
+
+@dataclass
+class PartyMember:
+    user_id: int
+    status: PartyMemberStatus = PartyMemberStatus.NEUTRAL
 
 
 @dataclass
@@ -26,19 +32,12 @@ class Party:
     size: int = 5
     status: PartyStatus = PartyStatus.ACTIVE
     description: str = ""
-
-
-@dataclass
-class PartyMember:
-    party_id: int
-    user_id: int
-    status: PartyMemberStatus = PartyMemberStatus.NEUTRAL
+    party_members: list[PartyMember] = field(default_factory=[])
 
 
 class PartyService:
     def __init__(self):
         self.parties: list[Party] = []
-        self.party_members: list[PartyMember] = []
 
     def create_party(
         self,
@@ -55,7 +54,16 @@ class PartyService:
         if party_kwargs.get("name") is None:
             party_kwargs["name"] = f"{user.name}'s {type} Party"
 
-        party = Party(uuid=uuid4(), owner_id=user.id, **party_kwargs)
+        party = Party(
+            uuid=uuid4(),
+            owner_id=user.id,
+            party_members=[
+                PartyMember(
+                    user_id=user.id,
+                )
+            ],
+            **party_kwargs,
+        )
         self.parties.append(party)
         return party
 
@@ -64,3 +72,14 @@ class PartyService:
             if party.uuid == uuid:
                 return party
         return None
+
+    @staticmethod
+    def generate_embed(party: Party) -> str:
+        content = (
+            f"`{party.size - len(party.party_members)}` spots left.\n\n"
+            + f"Current Party:\n"
+        )
+        for member in party.party_members:
+            content += f"- <@{member.user_id}>\n"
+
+        return content

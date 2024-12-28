@@ -71,12 +71,8 @@ async def create_party(
 
     await interaction.response.send_message(
         content=content,
-        embed=create_embed(
-            f"`{party.size - 1}` spots left.\n"
-            + f"Current Party:\n"
-            + f"- <@{interaction.user.id}>"
-        ),
-        view=PartyView(),
+        embed=create_embed(PartyService.generate_embed(party)),
+        view=PartyView(party),
         ephemeral=False,
     )
 

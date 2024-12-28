@@ -1,49 +1,30 @@
 import time
+from uuid import UUID
 import discord
 
 import db
+from party import Party, PartyMember, PartyService
+from util import create_embed
 
 
 class PartyView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, party: Party):
+        self.party: Party = party
         super().__init__(timeout=300)  # 5 minutes
 
-    # async def interaction_check(self, interaction: discord.Interaction):
-    #     if interaction.user.id != self.id_b:
-    #         return False
-    #     return True
+    @discord.ui.button(label="Join", style=discord.ButtonStyle.blurple)
+    async def join(self, interaction: discord.Interaction, _):
 
-    @discord.ui.button(label="Accept", style=discord.ButtonStyle.green)
-    async def accept(self, interaction: discord.Interaction, _):
+        # TODO: Check if the user is already in the party.
+        self.party.party_members.append(PartyMember(user_id=interaction.user.id))
 
-        print("TEST")
-        # if self.id_a in self.battle_cache:
-        #     del self.battle_cache[self.id_a]
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            embed=create_embed(PartyService.generate_embed(self.party))
+        )
 
-        # if self.id_b in self.battle_cache:
-        #     del self.battle_cache[self.id_b]
+    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red)
+    async def leave(self, interaction: discord.Interaction, _):
 
-        # if (self.id_a, self.id_b) in self.battle_cancel_cache:
-        #     del self.battle_cancel_cache[(self.id_a, self.id_b)]
-
-        # await interaction.response.send_message(
-        #     f"<@{self.id_a}> <@{self.id_b}>",
-        #     embed=create_embed("Leetcode battle cancelled!"),
-        # )
-
-        self.stop()
-
-    @discord.ui.button(label="Decline", style=discord.ButtonStyle.red)
-    async def decline(self, interaction: discord.Interaction, _):
-
-        print("YEET")
-        # if (self.id_a, self.id_b) in self.battle_cancel_cache:
-        #     del self.battle_cancel_cache[(self.id_a, self.id_b)]
-
-        # await interaction.response.send_message(
-        #     embed=create_embed(
-        #         f"<@{self.id_b}> declined the cancel request.",
-        #     )
-        # )
-
-        self.stop()
+        # TODO allow users to leave the party.
+        pass
