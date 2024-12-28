@@ -44,7 +44,7 @@ async def create_party(
     party_description: str = "",
 ):
     user = interaction.user
-    await db.create_party(
+    result = await db.create_party(
         party_name if party_name else f"{user.name}'s {party_type} Party",
         party_type,
         party_size,
@@ -53,7 +53,7 @@ async def create_party(
         user.id,
     )
 
-    await interaction.response.send_message(f"This is your message: ", ephemeral=False)
+    await interaction.response.send_message(f"{result}", ephemeral=False)
 
 
 @bot.event

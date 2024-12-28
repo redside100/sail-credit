@@ -50,8 +50,11 @@ async def create_party(
     party_description: str,
     leader_id: int,
 ) -> Dict[str, Any]:
-    await db.execute(
-        "INSERT INTO parties ( name, type, size, status, description, leader_id) VALUES (?, ?, ?, ?, ?, ?)",
+    cursor = await db.execute(
+        """--sql 
+        INSERT INTO parties ( name, type, size, status, description, leader_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
         (
             party_name,
             party_type,
@@ -62,11 +65,12 @@ async def create_party(
         ),
     )
     await db.commit()
-    return {
-        "party_name": party_name,
-        "party_type": party_type,
-        "party_size": party_size,
-        "party_status": party_status,
-        "party_description": party_description,
-        "leader_id": leader_id,
-    }
+
+    # Fetch the inserted row.
+    row_id = cursor.lastrowid
+    await cursor.close()
+    cursor = await db.execute("SELECT * FROM parties WHERE rowid = ?", (row_id,))
+    row = await cursor.fetchone()
+    await cursor.close()
+
+    return row
