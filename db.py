@@ -40,3 +40,33 @@ async def get_user(discord_id: int) -> Optional[Dict[str, Any]]:
             return None
 
         return row
+
+
+async def create_party(
+    party_name: str,
+    party_type: str,
+    party_size: int,
+    party_status: str,
+    party_description: str,
+    leader_id: int,
+) -> Dict[str, Any]:
+    await db.execute(
+        "INSERT INTO parties ( name, type, size, status, description, leader_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            party_name,
+            party_type,
+            party_size,
+            party_status,
+            party_description,
+            leader_id,
+        ),
+    )
+    await db.commit()
+    return {
+        "party_name": party_name,
+        "party_type": party_type,
+        "party_size": party_size,
+        "party_status": party_status,
+        "party_description": party_description,
+        "leader_id": leader_id,
+    }

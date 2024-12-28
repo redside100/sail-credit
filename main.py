@@ -31,10 +31,10 @@ async def ping(interaction: discord.Interaction, foo: str, bar: int):
     description="Creates a party, allowing others to let you know they want to join!",
 )
 @app_commands.describe(
-    party_name="Optional name for your party.",
-    party_description="Optional description for your party.",
-    party_size="The number of people you want in your party.",
-    party_time="The time you want to start the party.",
+    party_type="The type of party you're creating (e.g. Gartic Phone, RotMG)",
+    party_name="The name of the party (optional)",
+    party_size="The size of the party (default is 5)",
+    party_description="Any additional information you want to provide about the party.",
 )
 async def create_party(
     interaction: discord.Interaction,
@@ -44,11 +44,14 @@ async def create_party(
     party_description: str = "",
 ):
     user = interaction.user
-
-    user_id = user.id
-    if not party_name:
-        # Unsure of whether to use name, or global_name.
-        party_name = f"{user.name}'s {party_type} Party"
+    await db.create_party(
+        party_name if party_name else f"{user.name}'s {party_type} Party",
+        party_type,
+        party_size,
+        "active",
+        party_description,
+        user.id,
+    )
 
     await interaction.response.send_message(f"This is your message: ", ephemeral=False)
 
