@@ -17,6 +17,7 @@ def setup():
         except sqlite3.OperationalError as e:
             sys.stderr.write(f"Error setting up database: {e}")
             os.remove("sail_credit.db")
+            return
         db.close()
 
     if not os.path.isfile("token"):
