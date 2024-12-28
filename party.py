@@ -32,7 +32,7 @@ class Party:
     size: int = 5
     status: PartyStatus = PartyStatus.ACTIVE
     description: str = ""
-    party_members: list[PartyMember] = field(default_factory=[])
+    members: list[PartyMember] = field(default_factory=[])
 
 
 class PartyService:
@@ -57,7 +57,7 @@ class PartyService:
         party = Party(
             uuid=uuid4(),
             owner_id=user.id,
-            party_members=[
+            members=[
                 PartyMember(
                     user_id=user.id,
                 )
@@ -76,10 +76,9 @@ class PartyService:
     @staticmethod
     def generate_embed(party: Party) -> str:
         content = (
-            f"`{party.size - len(party.party_members)}` spots left.\n\n"
-            + f"Current Party:\n"
+            f"`{party.size - len(party.members)}` spots left.\n\n" + f"Current Party:\n"
         )
-        for member in party.party_members:
+        for member in party.members:
             content += f"- <@{member.user_id}>\n"
 
         return content

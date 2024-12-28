@@ -16,7 +16,7 @@ class PartyView(discord.ui.View):
     async def join(self, interaction: discord.Interaction, _):
 
         # TODO: Check if the user is already in the party.
-        self.party.party_members.append(PartyMember(user_id=interaction.user.id))
+        self.party.members.append(PartyMember(user_id=interaction.user.id))
 
         await interaction.response.defer()
         await interaction.edit_original_response(
