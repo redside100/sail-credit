@@ -165,3 +165,6 @@ token
 
 # vscode
 .vscode
+
+# config
+config.py
