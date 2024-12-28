@@ -4,14 +4,15 @@ CREATE TABLE users (
 );
 
 CREATE TABLE parties (
-    party_id INTEGER PRIMARY KEY,
-    party_name TEXT,
-    party_type TEXT,
-    party_size INTEGER,
-    party_status TEXT,
-    party_leader_id INTEGER,
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    type TEXT,
+    size INTEGER,
+    status TEXT,
+    description TEXT,
+    leader_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (party_leader_id) REFERENCES users(discord_id)
+    FOREIGN KEY (leader_id) REFERENCES users(discord_id)
 );
 
 CREATE TABLE party_members (
@@ -19,6 +20,6 @@ CREATE TABLE party_members (
     member_id INTEGER,
     status TEXT,
     PRIMARY KEY (party_id, member_id),
-    FOREIGN KEY (party_id) REFERENCES parties(party_id),
+    FOREIGN KEY (party_id) REFERENCES parties(id),
     FOREIGN KEY (member_id) REFERENCES users(discord_id)
 );
