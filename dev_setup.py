@@ -1,4 +1,5 @@
 import os
+import sys
 import sqlite3
 
 def setup():
@@ -10,8 +11,12 @@ def setup():
             script = f.read()
         
         db = sqlite3.connect("sail_credit.db")
-        db.cursor().executescript(script)
-        db.commit()
+        try:
+            db.cursor().executescript(script)
+            db.commit()
+        except sqlite3.OperationalError as e:
+            sys.stderr.write(f"Error setting up database: {e}")
+            os.remove("sail_credit.db")
         db.close()
 
     if not os.path.isfile("token"):
