@@ -4,7 +4,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE parties (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     type TEXT,
     size INTEGER,
