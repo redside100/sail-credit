@@ -45,9 +45,6 @@ class PartyService:
         user: User | Member,
         **kwargs,
     ) -> Party:
-
-        print(f"create_party() called with {type(user)}")
-
         # We don't want to pass None values to the Party constructor, preserving
         # the default values of the dataclass.
         party_kwargs = {kwarg: kwargs for kwarg in kwargs if kwargs[kwarg] is not None}
