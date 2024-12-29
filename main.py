@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Literal, Optional
 from discord import app_commands
 import discord
@@ -50,15 +51,16 @@ async def create_party(
     size: Optional[int],
     description: Optional[str],
 ):
+    creation_time = int(time.time())
     party: Party = party_service.create_party(
         user=interaction.user,
         role=role,
         name=name,
         size=size,
         description=description,
+        creation_time=creation_time,
     )
 
-    # TODO: It doesn't seem to be mentioning the role correctly.
     content = f"<@{interaction.user.id}> has created a party for <@&{role.id}>!\n"
     if party.description:
         content += f"Description: `{party.description}`\n"

@@ -36,6 +36,7 @@ class Party:
     status: PartyStatus = PartyStatus.ACTIVE
     description: str = ""
     members: list[PartyMember] = field(default_factory=[])
+    creation_time: int
 
     def generate_embed(self) -> str:
         content = (

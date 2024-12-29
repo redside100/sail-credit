@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, List, Optional
 import aiosqlite
 
 db = None
@@ -25,10 +26,10 @@ async def cleanup():
 
 async def create_user(discord_id: int) -> Dict[str, Any]:
     await db.execute(
-        "INSERT INTO users (discord_id, sail_credit) VALUES (?, 0)", (discord_id,)
+        "INSERT INTO users (discord_id, sail_credit) VALUES (?, 600)", (discord_id,)
     )
     await db.commit()
-    return {"discord_id": discord_id, "sail_credit": 0}
+    return {"discord_id": discord_id, "sail_credit": 600}
 
 
 async def get_user(discord_id: int) -> Optional[Dict[str, Any]]:
@@ -40,3 +41,31 @@ async def get_user(discord_id: int) -> Optional[Dict[str, Any]]:
             return None
 
         return row
+
+
+async def get_user_sail_credit_log(
+    discord_id: int, lookback: int
+) -> List[Dict[str, Any]]:
+    timestamp = int(time.time())
+
+    earliest_timestamp = timestamp - lookback
+    async with db.execute(
+        "SELECT * FROM sail_credit_log WHERE discord_id = ? AND timestamp > ? ORDER BY timestamp DESC",
+        (discord_id, earliest_timestamp),
+    ) as cursor:
+        rows = await cursor.fetchall()
+        return rows
+
+
+async def change_and_log_sail_credit(
+    discord_id: int, party_size: int, party_lifetime: int, old_ssc: int, new_ssc: int
+) -> None:
+    timestamp = int(time.time())
+    await db.execute(
+        "INSERT INTO sail_credit_log VALUES (?, ?, ?, ?, ?, ?)",
+        (discord_id, party_size, party_lifetime, old_ssc, new_ssc, timestamp),
+    )
+    await db.execute(
+        "UPDATE users SET sail_credit = ? WHERE discord_id = ?", (new_ssc, discord_id)
+    )
+    await db.commit()
