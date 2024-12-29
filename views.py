@@ -242,7 +242,7 @@ class PostPartyView(discord.ui.View):
     def generate_embed(self, reward_data: dict[str, int]) -> str:
         content = "The party was a success! 🎉\n\n"
         for user_id, reward in reward_data.items():
-            content += f"- <@{user_id}> received {reward} SSC.\n"
+            content += f"- <@{user_id}> received {reward['new'] - reward['old']} SSC ({reward['old']} SSC -> {reward['new']} SSC).\n"
         return content
 
     async def interaction_check(self, interaction: discord.Interaction):
@@ -375,9 +375,14 @@ class ReportView(discord.ui.View):
             # No gains to be had.
 
         if len(self.convict_votes) >= self.votes_needed:
-            content = f"<@{self.reported_id}> has been CONVICTED! 🔨"
+            fine = await bank.process_flaked_user(self.party, self.reported_id)
+            content = f"**CONVICTED.** 🔨\n\n"
+            content += (
+                f"<@{self.reported_id}> has been fined {fine['new'] - fine['old']} SSC "
+            )
+            content += f"({fine['old']} SSC -> {fine['new']} SSC) for flaking."
+            content += f" Thank you for contributing to a better community."
             await interaction.edit_original_response(content=content)
-            await bank.process_flaked_user(self.party, self.reported_id)
 
         # The party is no longer voting.
         self.party.status = PartyStatus.FAILED

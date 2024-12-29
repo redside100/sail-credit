@@ -108,7 +108,7 @@ class SailBank:
 
         return reward
 
-    async def process_party_reward(self, party: Party) -> dict[str, int]:
+    async def process_party_reward(self, party: Party) -> dict[str, dict[str, int]]:
         """
         Process the reward for each player in the party. Returns a dictionary of user
         IDs and the amount of sail credit they received.
@@ -118,13 +118,14 @@ class SailBank:
         data = {}
         for member in party.members:
             user = await db.get_user(member.user_id)
+            data[member.user_id] = {"old": user["sail_credit"], "new": None}
             history = await db.get_user_sail_credit_log(
                 member.user_id, self.LOOKBACK_WINDOW
             )
             reward = await self.credit(
                 member.user_id, user["sail_credit"], len(history)
             )
-            data[member.user_id] = reward
+            data[member.user_id]["new"] = user["sail_credit"] + reward
             await db.change_and_log_sail_credit(
                 member.user_id,
                 party.size,
@@ -134,7 +135,7 @@ class SailBank:
             )
         return data
 
-    async def process_flaked_user(self, party: Party, user_id: int) -> int:
+    async def process_flaked_user(self, party: Party, user_id: int) -> dict[str, int]:
         """
         Process the punishment for the user who flaked on the party. Returns how much
         SSC was deducted from the user.
@@ -156,7 +157,10 @@ class SailBank:
             user["sail_credit"],
             user["sail_credit"] + reward,
         )
-        return reward
+        return {
+            "old": user["sail_credit"],
+            "new": user["sail_credit"] + reward,
+        }
 
     def _percent(self, x: float) -> float:
         return round(x * 100, 3)
