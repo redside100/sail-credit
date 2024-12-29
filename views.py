@@ -1,3 +1,4 @@
+from datetime import timedelta
 import math
 import time
 from typing import List
@@ -31,6 +32,37 @@ class PartyView(discord.ui.View):
         self.party: Party = party
         self.party_service = party_service
         super().__init__(timeout=60 * 60)  # 1 hr
+
+        def callback_constructor(minutes: int):
+            async def button_callback(interaction: discord.Interaction):
+                if interaction.user.id != self.party.owner_id:
+                    await interaction.response.send_message(
+                        "Only the party leader can use this button!", ephemeral=True
+                    )
+                    return
+
+                self.party_service.update_party_start_time(self.party.uuid, minutes)
+                await interaction.response.defer()
+                await interaction.edit_original_response(
+                    embed=create_embed(self.party.generate_embed())
+                )
+
+            return button_callback
+
+        # Add time adjustment buttons
+        for val in [
+            ("-5m", -5),
+            ("-15m", -15),
+            ("-1h", -60),
+            ("+5m", 5),
+            ("+15m", 15),
+            ("+1h", 60),
+        ]:
+            button = discord.ui.Button(
+                label=val[0], style=discord.ButtonStyle.gray, row=1 if val[1] < 0 else 2
+            )
+            button.callback = callback_constructor(val[1])
+            self.add_item(button)
 
     # When this view is inactive, remove the party.
     async def on_timeout(self):

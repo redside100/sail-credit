@@ -1,11 +1,12 @@
 import asyncio
 import time
-from typing import Optional
+from typing import Literal, Optional
 from discord import app_commands
 import discord
 from discord.ext import commands
 import db
 from party import Party, PartyService
+
 from util import user_command, create_embed
 from views import MessageBook, PartyView
 
@@ -16,8 +17,7 @@ bot = commands.Bot(
     case_insensitive=False,
 )
 
-# Services
-party_service = PartyService()
+party_service: Optional[PartyService] = None
 
 
 @bot.tree.command(
@@ -64,13 +64,16 @@ async def create_party(
     if party.description:
         content += f"Description: `{party.description}`\n"
 
-    await interaction.response.send_message(
+    message = await interaction.response.send_message(
         content=content,
         embed=create_embed(party.generate_embed()),
         view=PartyView(party, party_service),
         ephemeral=False,
         allowed_mentions=discord.AllowedMentions(),
     )
+
+    # Save a message instance in the party object.
+    party.message = message
 
 
 @bot.tree.command(name="book")
@@ -84,6 +87,8 @@ async def book(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
+    global party_service
+    party_service = PartyService()
     print("Ready!")
 
 
