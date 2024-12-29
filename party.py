@@ -34,6 +34,18 @@ class Party:
     description: str = ""
     members: list[PartyMember] = field(default_factory=[])
 
+    def generate_embed(self) -> str:
+        content = (
+            f"`{self.size - len(self.members)}` spots left.\n\n" + f"Current Party:\n"
+        )
+        for member in self.members:
+            content += f"- <@{member.user_id}>\n"
+
+        return content
+
+    def leave_party(self, user_id: int):
+        self.members = [member for member in self.members if member.user_id != user_id]
+
 
 class PartyService:
     def __init__(self):
@@ -72,13 +84,3 @@ class PartyService:
             if party.uuid == uuid:
                 return party
         return None
-
-    @staticmethod
-    def generate_embed(party: Party) -> str:
-        content = (
-            f"`{party.size - len(party.members)}` spots left.\n\n" + f"Current Party:\n"
-        )
-        for member in party.members:
-            content += f"- <@{member.user_id}>\n"
-
-        return content

@@ -71,7 +71,7 @@ async def create_party(
 
     await interaction.response.send_message(
         content=content,
-        embed=create_embed(PartyService.generate_embed(party)),
+        embed=create_embed(party.generate_embed()),
         view=PartyView(party),
         ephemeral=False,
     )
