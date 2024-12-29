@@ -10,8 +10,9 @@ from util import create_embed, disable_buttons_and_stop_view
 
 
 class ReportSelectView(discord.ui.View):
-    def __init__(self, party: Party, user_id: int):
+    def __init__(self, party: Party, reporter_id: int):
         self.party = party
+        self.reporter_id = reporter_id
         super().__init__(timeout=60)  # 1m
 
         self.select = discord.ui.Select(placeholder="Select a user...")
@@ -19,21 +20,15 @@ class ReportSelectView(discord.ui.View):
         self.select.options = [
             discord.SelectOption(label=member.name, value=member.user_id)
             for member in self.party.members
-            # TODO: uncomment to filter out yourself
-            # if member.user_id != user_id
         ]
 
         self.add_item(self.select)
 
     async def select_user(self, interaction: discord.Interaction):
         selected_id = self.select.values[0]
-
-        self.acquittals = 0
-        self.convictions = 0
-
         view = ReportView(self.party)
         await interaction.response.send_message(
-            content=f" <@{selected_id}> has been reported.",
+            content=f" <@{selected_id}> has been reported by <@{self.reporter_id}>.",
             embed=create_embed(view.generate_embed()),
             view=view,
             ephemeral=False,
@@ -44,49 +39,72 @@ class ReportSelectView(discord.ui.View):
 class ReportView(discord.ui.View):
     def __init__(self, party: Party):
         self.party = party
-        self.convict_votes = 0
-        self.acquit_votes = 0
+        self.convict_votes = []
+        self.acquit_votes = []
         super().__init__(timeout=300)  # 5m
 
     def generate_embed(self) -> str:
         self.votes_needed = math.ceil(self.party.size / 2)
-        convict_ratio = f"`{self.convict_votes}` / `{self.votes_needed}`"
-        acquit_ratio = f"`{self.acquit_votes}` / `{self.votes_needed}`"
+        convict_ratio = f"`{len(self.convict_votes)}` / `{self.votes_needed}`"
+        acquit_ratio = f"`{len(self.acquit_votes)}` / `{self.votes_needed}`"
         content = f"{convict_ratio} to convict.\n{acquit_ratio} to acquit."
         return content
 
     @discord.ui.button(label="Convict", style=discord.ButtonStyle.red)
     async def convict(self, interaction: discord.Interaction, _):
+        # Check if the user is in the party.
+        party_member_ids = [member.user_id for member in self.party.members]
+        if interaction.user.id not in party_member_ids:
+            await interaction.response.send_message(
+                "You are not in the party.", ephemeral=True
+            )
+            return
 
-        pass
-        # if not interaction.user.id == self.party.owner_id:
-        #     await interaction.response.send_message(
-        #         "Only the party leader can use this button!", ephemeral=True
-        #     )
-        #     return
+        # Check if the user has already voted.
+        if interaction.user.id in self.convict_votes:
+            await interaction.response.send_message(
+                "You have already voted to convict.", ephemeral=True
+            )
+            return
 
-        # await interaction.response.defer()
+        # Check if the user has already voted to acquit, and remove if so.
+        if interaction.user.id in self.acquit_votes:
+            self.acquit_votes.remove(interaction.user.id)
 
-        # # Notify all party members.
-        # party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
-        # original_message = await interaction.original_response()
-        # await original_message.reply(
-        #     content="".join(party_mentions),
-        #     embed=create_embed(
-        #         f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\nFor the next 5 minutes, any party member can click the **Report** button to report a flaker."
-        #     ),
-        #     view=PostPartyView(self.party),
-        # )
-
-        # # This party has started, so mark it.
-        # self.party.status = PartyStatus.STARTED
-
-        # self.party_service.remove_party(self.party.uuid)
-        # self.stop()
+        # Record the vote and re-generate the embed.
+        self.convict_votes.append(interaction.user.id)
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            embed=create_embed(self.generate_embed())
+        )
 
     @discord.ui.button(label="Acquit", style=discord.ButtonStyle.green)
     async def aquit(self, interaction: discord.Interaction, _):
-        pass
+        # Check if the user is in the party.
+        party_member_ids = [member.user_id for member in self.party.members]
+        if interaction.user.id not in party_member_ids:
+            await interaction.response.send_message(
+                "You are not in the party.", ephemeral=True
+            )
+            return
+
+        # Check if the user has already voted.
+        if interaction.user.id in self.acquit_votes:
+            await interaction.response.send_message(
+                "You have already voted to convict.", ephemeral=True
+            )
+            return
+
+        # Check if the user has already voted to convict, and remove if so.
+        if interaction.user.id in self.convict_votes:
+            self.convict_votes.remove(interaction.user.id)
+
+        # Record the vote and re-generate the embed.
+        self.acquit_votes.append(interaction.user.id)
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            embed=create_embed(self.generate_embed())
+        )
 
 
 class PostPartyView(discord.ui.View):
