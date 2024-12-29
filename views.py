@@ -6,7 +6,207 @@ import discord
 
 import db
 from party import Party, PartyMember, PartyMemberStatus, PartyService, PartyStatus
+from sail_bank import SailBank
 from util import create_embed, disable_buttons_and_stop_view
+
+"""
+View Workflow for Parties
+
+    1. PartyView (ASSEMBLING)
+    2. PostPartyView (SUCCESS)
+
+    (if somebody flaked, and no party isn't currently VOTING)
+    3. ReportSelectView (VOTING)
+    4. ReportView (VOTING)
+    5. Timeout (FAILED)
+"""
+
+
+class PartyView(discord.ui.View):
+    """
+    This view is responsible for removing the party on timeout, or start.
+    """
+
+    def __init__(self, party: Party, party_service: PartyService):
+        self.party: Party = party
+        self.party_service = party_service
+        super().__init__(timeout=60 * 60)  # 1 hr
+
+    # When this view is inactive, remove the party.
+    async def on_timeout(self):
+        self.party_service.remove_party(self.party.uuid)
+
+    @discord.ui.button(label="Start", style=discord.ButtonStyle.green)
+    async def start(self, interaction: discord.Interaction, _):
+
+        if not interaction.user.id == self.party.owner_id:
+            await interaction.response.send_message(
+                "Only the party leader can use this button!", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+
+        # Notify all party members.
+        party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
+
+        # Force reportable = true for development
+        # TODO: uncomment
+        reportable = True
+        # reportable = len(self.party.members) > 1
+
+        original_message = await interaction.original_response()
+        report_msg = (
+            "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
+            if reportable
+            else "Since this party has less than 2 members, there is no option to report flakers."
+        )
+
+        next_view = PostPartyView(self.party, None)
+        next_view.message = await original_message.reply(
+            content="The party has started! Come join "
+            + ", ".join(party_mentions)
+            + ".",
+            embed=create_embed(
+                f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\n\n{report_msg}"
+            ),
+            view=next_view,
+        )
+
+        self.party_service.remove_party(self.party.uuid)
+        await disable_buttons_and_stop_view(self, interaction)
+
+    @discord.ui.button(label="Join", style=discord.ButtonStyle.blurple)
+    async def join(self, interaction: discord.Interaction, _):
+
+        # Check if the user is already in the party.
+        party_member_ids = [member.user_id for member in self.party.members]
+        if interaction.user.id in party_member_ids:
+            await interaction.response.send_message(
+                "You are already in the party.", ephemeral=True
+            )
+            return
+
+        # Check if the party is full.
+        # TODO: In the future, people can still join parties which are full but are
+        # waitlisted.
+        if len(self.party.members) >= self.party.size:
+            await interaction.response.send_message(
+                "The party is full.", ephemeral=True
+            )
+            return
+
+        self.party.members.append(
+            PartyMember(user_id=interaction.user.id, name=interaction.user.name)
+        )
+
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            embed=create_embed(self.party.generate_embed())
+        )
+
+    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red)
+    async def leave(self, interaction: discord.Interaction, _):
+
+        # Check if the user is in the party.
+        party_member_ids = [member.user_id for member in self.party.members]
+        if interaction.user.id not in party_member_ids:
+            await interaction.response.send_message(
+                "You are not in the party.", ephemeral=True
+            )
+            return
+
+        old_owner = self.party.owner_id
+        self.party.leave_party(interaction.user.id)
+
+        await interaction.response.defer()
+
+        # If the party has no members left, it's abandoned.
+        if not self.party.members:
+            await interaction.edit_original_response(
+                embed=create_embed("This party was abandoned since everyone left."),
+                content=None,
+            )
+            await disable_buttons_and_stop_view(self, interaction)
+            return
+
+        await interaction.edit_original_response(
+            embed=create_embed(self.party.generate_embed()),
+            # If the party has a new owner, announce it.
+            content=(
+                f"<@{self.party.owner_id}> is the new party leader."
+                if self.party.owner_id != old_owner
+                else None
+            ),
+        )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, _):
+
+        # Check if the user is the leader.
+        if interaction.user.id != self.party.owner_id:
+            await interaction.response.send_message(
+                "Only the party leader can use this button!", ephemeral=True
+            )
+            return
+
+        self.party_service.remove_party(self.party.uuid)
+        await interaction.response.defer()
+
+        await interaction.edit_original_response(
+            embed=create_embed(
+                f"This party was cancelled by the party leader <@{interaction.user.id}>."
+            ),
+            content=None,
+        )
+        await disable_buttons_and_stop_view(self, interaction)
+
+
+class PostPartyView(discord.ui.View):
+    def __init__(self, party: Party, message: discord.Message):
+        self.party = party
+        self.message = message
+        super().__init__(timeout=2)  # TESTING PURPOSES.
+        # super().__init__(timeout=300)  # 5m  # TODO: Uncomment.
+
+    async def on_timeout(self):
+        """
+        When the PostPartyView times out, and the party status is not VOTING or FAILED,
+        that means no one reported a flaker. The party is a success.
+        """
+        if (
+            self.party.status != PartyStatus.VOTING
+            and self.party.status != PartyStatus.FAILED
+        ):
+            self.party.status = PartyStatus.SUCCESS
+            print("Good party.")
+            await disable_buttons_and_stop_view(self, self.message)
+            await self.message.edit(
+                embed=create_embed(f"The party was a success! 🎉"),
+            )
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        # Only allow party members to interact with this view.
+        if interaction.user.id not in [member.user_id for member in self.party.members]:
+            return False
+        return True
+
+    @discord.ui.button(label="Report", style=discord.ButtonStyle.red)
+    async def report(self, interaction: discord.Interaction, _):
+
+        # Check party status
+        if self.party.status == PartyStatus.VOTING:
+            await interaction.response.send_message(
+                "Voting has already started. Please wait for the current vote to end.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_message(
+            content="Who do you want to report?",
+            view=ReportSelectView(self.party, interaction.user.id),
+            ephemeral=True,
+        )
 
 
 class ReportSelectView(discord.ui.View):
@@ -108,10 +308,11 @@ class ReportView(discord.ui.View):
         ):
             return
 
+        # Otherwise calculate the results of the vote.
         if len(self.acquit_votes) >= self.votes_needed:
             content = f"<@{self.reported_id}> has been ACQUITTED! 🎉"
             await interaction.edit_original_response(content=content)
-            # TODO: SSC gains.
+            # No gains to be had.
 
         if len(self.convict_votes) >= self.votes_needed:
             content = f"<@{self.reported_id}> has been CONVICTED! 🔨"
@@ -119,8 +320,7 @@ class ReportView(discord.ui.View):
             # TODO: SSC deductions.
 
         # The party is no longer voting.
-        self.party.status = PartyStatus.INACTIVE
-
+        self.party.status = PartyStatus.FAILED
         await disable_buttons_and_stop_view(self, interaction)
 
     async def on_convict(self, interaction: discord.Interaction):
@@ -178,178 +378,12 @@ class ReportView(discord.ui.View):
         )
 
 
-class PostPartyView(discord.ui.View):
-    def __init__(self, party: Party):
-        self.party = party
-        super().__init__(timeout=300)  # 5m
-
-    async def interaction_check(self, interaction: discord.Interaction):
-        # Only allow party members to interact with this view.
-        if interaction.user.id not in [member.user_id for member in self.party.members]:
-            return False
-        return True
-
-    @discord.ui.button(label="Report", style=discord.ButtonStyle.red)
-    async def report(self, interaction: discord.Interaction, _):
-
-        # Check party status
-        if self.party.status == PartyStatus.VOTING:
-            await interaction.response.send_message(
-                "Voting has already started. Please wait for the current vote to end.",
-                ephemeral=True,
-            )
-            return
-
-        await interaction.response.send_message(
-            content="Who do you want to report?",
-            view=ReportSelectView(self.party, interaction.user.id),
-            ephemeral=True,
-        )
-
-
-class PartyView(discord.ui.View):
-    def __init__(self, party: Party, party_service: PartyService):
-        self.party: Party = party
-        self.party_service = party_service
-        super().__init__(timeout=60 * 60)  # 1 hr
-
-    # When this view is inactive, remove the party.
-    async def on_timeout(self):
-        self.party_service.remove_party(self.party.uuid)
-
-    @discord.ui.button(label="Start", style=discord.ButtonStyle.green)
-    async def start(self, interaction: discord.Interaction, _):
-
-        if not interaction.user.id == self.party.owner_id:
-            await interaction.response.send_message(
-                "Only the party leader can use this button!", ephemeral=True
-            )
-            return
-
-        await interaction.response.defer()
-
-        # Notify all party members.
-        party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
-
-        # Force reportable = true for development
-        # TODO: uncomment
-        reportable = True
-        # reportable = len(self.party.members) > 1
-
-        original_message = await interaction.original_response()
-        report_msg = (
-            "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
-            if reportable
-            else "Since this party has less than 2 members, there is no option to report flakers."
-        )
-        await original_message.reply(
-            content="".join(party_mentions),
-            embed=create_embed(
-                f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\n\n{report_msg}"
-            ),
-            view=PostPartyView(self.party) if reportable else None,
-        )
-
-        # This party has started, so mark it.
-        self.party.status = PartyStatus.STARTED
-
-        self.party_service.remove_party(self.party.uuid)
-
-        await disable_buttons_and_stop_view(self, interaction)
-
-    @discord.ui.button(label="Join", style=discord.ButtonStyle.blurple)
-    async def join(self, interaction: discord.Interaction, _):
-
-        # Check if the user is already in the party.
-        party_member_ids = [member.user_id for member in self.party.members]
-        if interaction.user.id in party_member_ids:
-            await interaction.response.send_message(
-                "You are already in the party.", ephemeral=True
-            )
-            return
-
-        # Check if the party is full.
-        # TODO: In the future, people can still join parties which are full but are
-        # waitlisted.
-        if len(self.party.members) >= self.party.size:
-            await interaction.response.send_message(
-                "The party is full.", ephemeral=True
-            )
-            return
-
-        self.party.members.append(
-            PartyMember(user_id=interaction.user.id, name=interaction.user.name)
-        )
-
-        await interaction.response.defer()
-        await interaction.edit_original_response(
-            embed=create_embed(self.party.generate_embed())
-        )
-
-    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red)
-    async def leave(self, interaction: discord.Interaction, _):
-
-        # Check if the user is in the party.
-        party_member_ids = [member.user_id for member in self.party.members]
-        if interaction.user.id not in party_member_ids:
-            await interaction.response.send_message(
-                "You are not in the party.", ephemeral=True
-            )
-            return
-
-        old_owner = self.party.owner_id
-        self.party.leave_party(interaction.user.id)
-
-        await interaction.response.defer()
-
-        # If the party has no members left, it's abandoned.
-        if not self.party.members:
-            await interaction.edit_original_response(
-                embed=create_embed("This party was abandoned since everyone left."),
-                content=None,
-            )
-            await disable_buttons_and_stop_view(self, interaction)
-            return
-
-        await interaction.edit_original_response(
-            embed=create_embed(self.party.generate_embed()),
-            # If the party has a new owner, announce it.
-            content=(
-                f"<@{self.party.owner_id}> is the new party leader."
-                if self.party.owner_id != old_owner
-                else None
-            ),
-        )
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, _):
-
-        # Check if the user is the leader.
-        if interaction.user.id != self.party.owner_id:
-            await interaction.response.send_message(
-                "Only the party leader can use this button!", ephemeral=True
-            )
-            return
-
-        self.party_service.remove_party(self.party.uuid)
-        await interaction.response.defer()
-
-        await interaction.edit_original_response(
-            embed=create_embed(
-                f"This party was cancelled by the party leader <@{interaction.user.id}>."
-            ),
-            content=None,
-        )
-        await disable_buttons_and_stop_view(self, interaction)
-
-
-"""
-General use view for showing multi-page content.
-Accepts a list of embeds.
-"""
-
-
 class MessageBook(discord.ui.View):
+    """
+    General use view for showing multi-page content.
+    Accepts a list of embeds.
+    """
+
     def __init__(
         self,
         user_id: int,

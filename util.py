@@ -52,9 +52,15 @@ async def calculate_sail_credit_delta(
 
 
 async def disable_buttons_and_stop_view(
-    view: discord.ui.View, interaction: discord.Interaction
+    view: discord.ui.View, obj: discord.Interaction | discord.Message
 ):
     for component in view.children:
         if isinstance(component, discord.ui.Button):
             component.disabled = True
-    await interaction.edit_original_response(view=view)
+
+    if type(obj) == discord.Message:
+        await obj.edit(view=view)
+    elif type(obj) == discord.Interaction:
+        await obj.edit_original_response(view=view)
+    else:
+        raise Exception("Invalid object type passed to disable_buttons_and_stop_view")
