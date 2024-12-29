@@ -82,8 +82,8 @@ class PartyService:
 
         # Pre-processing.
         if party_kwargs.get("name") is None:
-            role_id = party_kwargs["role"]
-            party_kwargs["name"] = f"{user.name}'s <@&{role_id}> Party"
+            role = party_kwargs["role"]
+            party_kwargs["name"] = f"{user.display_name}'s <@&{role.id}> Party"
 
         party_uuid = uuid4()
 
@@ -100,7 +100,7 @@ class PartyService:
         party = Party(
             uuid=party_uuid,
             owner_id=user.id,
-            members=[PartyMember(user_id=user.id, name=user.name)],
+            members=[PartyMember(user_id=user.id, name=user.display_name)],
             start_time=int(run_date.timestamp()),
             **party_kwargs,
         )

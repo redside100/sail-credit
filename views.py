@@ -31,7 +31,7 @@ class PartyView(discord.ui.View):
     def __init__(self, party: Party, party_service: PartyService, scheduled=True):
         self.party: Party = party
         self.party_service = party_service
-        super().__init__(timeout=60 * 60)  # 1 hr
+        super().__init__(timeout=3600 * 12)  # 12 hr
 
         # Start, join, leave, cancel buttons
         start_button = discord.ui.Button(label="Start", style=discord.ButtonStyle.green)
@@ -152,7 +152,7 @@ class PartyView(discord.ui.View):
             return
 
         self.party.members.append(
-            PartyMember(user_id=interaction.user.id, name=interaction.user.name)
+            PartyMember(user_id=interaction.user.id, name=interaction.user.display_name)
         )
 
         await interaction.response.defer()
