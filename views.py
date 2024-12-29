@@ -34,6 +34,7 @@ class PartyView(discord.ui.View):
 
     # When this view is inactive, remove the party.
     async def on_timeout(self):
+        # TODO: Fix cancer. Pass in self-referential message, and then cancel.
         self.party_service.remove_party(self.party.uuid)
 
     @discord.ui.button(label="Start", style=discord.ButtonStyle.green)
@@ -47,20 +48,23 @@ class PartyView(discord.ui.View):
 
         await interaction.response.defer()
 
+        # TODO: Uncomment.
+        # if len(self.party.members) < 2:
+        #     await interaction.edit_original_response(
+        #         embed=create_embed(
+        #             "This party was not started since there are not enough members."
+        #         ),
+        #         content=None,
+        #     )
+        #     self.party_service.remove_party(self.party.uuid)
+        #     await disable_buttons_and_stop_view(self, interaction)
+        #     return
+
         # Notify all party members.
         party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
 
-        # Force reportable = true for development
-        # TODO: uncomment
-        reportable = True
-        # reportable = len(self.party.members) > 1
-
         original_message = await interaction.original_response()
-        report_msg = (
-            "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
-            if reportable
-            else "Since this party has less than 2 members, there is no option to report flakers."
-        )
+        report_msg = "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
 
         next_view = PostPartyView(self.party, None)
         next_view.message = await original_message.reply(
