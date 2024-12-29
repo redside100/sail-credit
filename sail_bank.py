@@ -1,4 +1,5 @@
 import math
+import time
 from party import Party
 import db
 import party
@@ -18,7 +19,10 @@ class SailBank:
 
     # How far back we check for previous parties, in seconds. Reward should be
     # decreased for each party joined within this time frame.
-    LOOKBACK_WINDOW = 60 * 60 * 24
+    LOOKBACK_WINDOW = 60 * 60 * 24  # 24 hours
+
+    # How far back we check for previous flake incidents, in seconds.
+    FLAKE_WINDOW = 60 * 60 * 24 * 30  # 30 days
 
     async def process(flake: bool):
         """
@@ -28,7 +32,14 @@ class SailBank:
 
         pass
 
-    def debit(self, party: Party, user_id: int):
+    async def debit(
+        self,
+        user_id: int,
+        current_ssc: int,
+        flake_count: int,
+        party_age: int,
+        party_size: int,
+    ):
         """
         Method for calculating how much sail credit to deduct to give to a user for
         flaking on a party.
@@ -48,6 +59,7 @@ class SailBank:
             - RATIONALE: The larger the party, the more people are affected by the
             flake.
         """
+        print("-3")
         return -3
 
     async def credit(self, user_id: int, current_ssc: int, parties_joined: int):
@@ -101,6 +113,8 @@ class SailBank:
         Process the reward for each player in the party. Returns a dictionary of user
         IDs and the amount of sail credit they received.
         """
+        party_age = party.creation_time - int(time.time())
+
         data = {}
         for member in party.members:
             user = await db.get_user(member.user_id)
@@ -113,10 +127,8 @@ class SailBank:
             data[member.user_id] = reward
             await db.change_and_log_sail_credit(
                 member.user_id,
-                0,
-                0,
-                # party.size,
-                # party.lifetime,
+                party.size,
+                party_age,
                 user["sail_credit"],
                 user["sail_credit"] + reward,
             )
@@ -127,7 +139,23 @@ class SailBank:
         Process the punishment for the user who flaked on the party. Returns how much
         SSC was deducted from the user.
         """
-        reward = await self.debit(party, user_id)
+        user = await db.get_user(user_id)
+        history = await db.get_user_sail_credit_log(user_id, self.FLAKE_WINDOW)
+        party_age = party.creation_time - int(time.time())
+        reward = await self.debit(
+            user_id,
+            user["sail_credit"],
+            len(history),
+            party_age,
+            party.size,
+        )
+        await db.change_and_log_sail_credit(
+            user_id,
+            party.size,
+            party_age,
+            user["sail_credit"],
+            user["sail_credit"] + reward,
+        )
         return reward
 
     def _percent(self, x: float) -> float:
