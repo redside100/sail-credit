@@ -10,7 +10,7 @@ from util import create_embed
 class PartyView(discord.ui.View):
     def __init__(self, party: Party):
         self.party: Party = party
-        super().__init__(timeout=300)  # 5 minutes
+        super().__init__(timeout=60 * 60)  # 1 hr
 
     @discord.ui.button(label="Join", style=discord.ButtonStyle.blurple)
     async def join(self, interaction: discord.Interaction, _):

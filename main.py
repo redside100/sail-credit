@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Literal, Optional
 from discord import app_commands
 import discord
 from discord.ext import commands
@@ -37,7 +37,7 @@ async def ping(interaction: discord.Interaction, foo: str, bar: int):
     description="Creates a party, allowing others to let you know they want to join!",
 )
 @app_commands.describe(
-    type="The type of party you're creating (e.g. Gartic Phone, RotMG)",
+    role="The role of the party you're creating (e.g. @goofy「无畏契约」, @flaccid)",
     name="The name of the party (optional)",
     size="The size of the party (default is 5)",
     description="Any additional information you want to provide about the party.",
@@ -45,28 +45,21 @@ async def ping(interaction: discord.Interaction, foo: str, bar: int):
 @user_command()
 async def create_party(
     interaction: discord.Interaction,
-    type: str,
+    role: discord.Role,
     name: Optional[str],
     size: Optional[int],
     description: Optional[str],
 ):
     party: Party = party_service.create_party(
         user=interaction.user,
-        type=type,
+        role=role,
         name=name,
         size=size,
         description=description,
     )
 
-    # If the party type is supported, send out a ping to the channel.
-    role_id = config.SUPPORTED_PARTY_TYPES.get(type.upper())
-    if role_id:
-        party_type_label = f"<@&{role_id}>"
-    else:
-        party_type_label = f"`{party.type}`"
-
     # TODO: It doesn't seem to be mentioning the role correctly.
-    content = f"<@{interaction.user.id}> has created a party for {party_type_label}!\n"
+    content = f"<@{interaction.user.id}> has created a party for <@&{role.id}>!\n"
     if party.description:
         content += f"Description: `{party.description}`\n"
 
@@ -75,6 +68,7 @@ async def create_party(
         embed=create_embed(party.generate_embed()),
         view=PartyView(party),
         ephemeral=False,
+        allowed_mentions=discord.AllowedMentions(),
     )
 
 

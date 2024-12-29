@@ -3,6 +3,7 @@ from typing import Optional
 from enum import Enum
 from uuid import UUID, uuid4
 from discord import User, Member
+import discord
 
 
 class PartyStatus(Enum):
@@ -26,7 +27,7 @@ class PartyMember:
 @dataclass
 class Party:
     uuid: UUID
-    type: str
+    role: discord.Role
     name: str
     owner_id: int
     size: int = 5
@@ -64,7 +65,8 @@ class PartyService:
 
         # Pre-processing.
         if party_kwargs.get("name") is None:
-            party_kwargs["name"] = f"{user.name}'s {type} Party"
+            role_id = party_kwargs["role"]
+            party_kwargs["name"] = f"{user.name}'s <@&{role_id}> Party"
 
         party = Party(
             uuid=uuid4(),
