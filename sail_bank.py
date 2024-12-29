@@ -99,17 +99,14 @@ class SailBank:
 
         log = (
             f"[user-{user_id}]: base-{self.BASE_REWARD} SSC"
-            + f" * dim-{self.percent(diminishing_ratio)}%"
+            + f" * dim-{self._percent(diminishing_ratio)}%"
         )
         if tax_ratio:
-            log += f" * tax-{self.percent(tax_ratio)}%"
+            log += f" * tax-{self._percent(tax_ratio)}%"
         log += f" = {reward} SSC for joining a party."
         print(log)
 
         return reward
-
-    def percent(self, x: float) -> float:
-        return round(x * 100, 3)
 
     async def process_party_reward(self, party: Party) -> dict[str, int]:
         """
@@ -121,3 +118,6 @@ class SailBank:
             reward = await self.credit(member.user_id)
             data[member.user_id] = reward
         return data
+
+    def _percent(self, x: float) -> float:
+        return round(x * 100, 3)
