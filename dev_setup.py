@@ -23,6 +23,8 @@ def setup():
             "Create an app at: https://discord.com/developers/applications and add a bot token to the file!"
         )
 
+    os.system("pre-commit install")
+
     print("Done setup!")
 
 
