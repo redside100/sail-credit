@@ -4,8 +4,49 @@ from uuid import UUID
 import discord
 
 import db
-from party import Party, PartyMember, PartyService
+from party import Party, PartyMember, PartyService, PartyStatus
 from util import create_embed
+
+
+class ReportView(discord.ui.View):
+    def __init__(self, party: Party):
+        self.party = party
+        super().__init__(timeout=60)  # 1m
+
+        self.member_ids = set([member.user_id for member in self.party.members])
+        self.select = discord.ui.UserSelect(placeholder="Select a user...")
+        self.select.callback = self.select_user
+        self.add_item(self.select)
+
+    async def select_user(self, interaction: discord.Interaction):
+        selected_id = self.select.values[0].id
+        if selected_id not in self.member_ids:
+            await interaction.response.send_message("This user isn't in the party.")
+            return
+
+        await interaction.response.send_message(
+            f"Selected <@{selected_id}>", ephemeral=True
+        )
+
+
+class PostPartyView(discord.ui.View):
+    def __init__(self, party: Party):
+        self.party = party
+        super().__init__(timeout=300)  # 5m
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        # Only allow party members to interact with this view.
+        if interaction.user.id not in [member.user_id for member in self.party.members]:
+            return False
+        return True
+
+    @discord.ui.button(label="Report", style=discord.ButtonStyle.red)
+    async def report(self, interaction: discord.Interaction, _):
+        await interaction.response.send_message(
+            content="Who do you want to report?",
+            view=ReportView(self.party),
+            ephemeral=True,
+        )
 
 
 class PartyView(discord.ui.View):
@@ -13,6 +54,10 @@ class PartyView(discord.ui.View):
         self.party: Party = party
         self.party_service = party_service
         super().__init__(timeout=60 * 60)  # 1 hr
+
+    # When this view is inactive, remove the party.
+    async def on_timeout(self):
+        self.party_service.remove_party(self.party.uuid)
 
     @discord.ui.button(label="Start", style=discord.ButtonStyle.green)
     async def start(self, interaction: discord.Interaction, _):
@@ -31,12 +76,14 @@ class PartyView(discord.ui.View):
         await original_message.reply(
             content="".join(party_mentions),
             embed=create_embed(
-                f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!"
+                f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\nFor the next 5 minutes, any party member can click the **Report** button to report a flaker."
             ),
-            view=None,
+            view=PostPartyView(self.party),
         )
 
-        # This party has started, so remove it.
+        # This party has started, so mark it.
+        self.party.status = PartyStatus.STARTED
+
         self.party_service.remove_party(self.party.uuid)
         self.stop()
 

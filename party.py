@@ -8,6 +8,7 @@ import discord
 
 class PartyStatus(Enum):
     ACTIVE = "ACTIVE"
+    STARTED = "STARTED"
     INACTIVE = "INACTIVE"
     DELETED = "DELETED"
 
