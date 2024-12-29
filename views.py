@@ -9,20 +9,23 @@ from util import create_embed
 
 
 class ReportView(discord.ui.View):
-    def __init__(self, party: Party):
+    def __init__(self, party: Party, user_id: int):
         self.party = party
         super().__init__(timeout=60)  # 1m
 
-        self.member_ids = set([member.user_id for member in self.party.members])
-        self.select = discord.ui.UserSelect(placeholder="Select a user...")
+        self.select = discord.ui.Select(placeholder="Select a user...")
         self.select.callback = self.select_user
+        self.select.options = [
+            discord.SelectOption(label=member.name, value=member.user_id)
+            for member in self.party.members
+            # TODO: uncomment to filter out yourself
+            # if member.user_id != user_id
+        ]
+
         self.add_item(self.select)
 
     async def select_user(self, interaction: discord.Interaction):
-        selected_id = self.select.values[0].id
-        if selected_id not in self.member_ids:
-            await interaction.response.send_message("This user isn't in the party.")
-            return
+        selected_id = self.select.values[0]
 
         await interaction.response.send_message(
             f"Selected <@{selected_id}>", ephemeral=True
@@ -44,7 +47,7 @@ class PostPartyView(discord.ui.View):
     async def report(self, interaction: discord.Interaction, _):
         await interaction.response.send_message(
             content="Who do you want to report?",
-            view=ReportView(self.party),
+            view=ReportView(self.party, interaction.user.id),
             ephemeral=True,
         )
 
@@ -72,13 +75,24 @@ class PartyView(discord.ui.View):
 
         # Notify all party members.
         party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
+
+        # Force reportable = true for development
+        # TODO: uncomment
+        reportable = True
+        # reportable = len(self.party.members) > 1
+
         original_message = await interaction.original_response()
+        report_msg = (
+            "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
+            if reportable
+            else "Since this party has less than 2 members, there is no option to report flakers."
+        )
         await original_message.reply(
             content="".join(party_mentions),
             embed=create_embed(
-                f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\nFor the next 5 minutes, any party member can click the **Report** button to report a flaker."
+                f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\n\n{report_msg}"
             ),
-            view=PostPartyView(self.party),
+            view=PostPartyView(self.party) if reportable else None,
         )
 
         # This party has started, so mark it.
@@ -107,7 +121,9 @@ class PartyView(discord.ui.View):
             )
             return
 
-        self.party.members.append(PartyMember(user_id=interaction.user.id))
+        self.party.members.append(
+            PartyMember(user_id=interaction.user.id, name=interaction.user.name)
+        )
 
         await interaction.response.defer()
         await interaction.edit_original_response(

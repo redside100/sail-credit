@@ -22,6 +22,7 @@ class PartyMemberStatus(Enum):
 @dataclass
 class PartyMember:
     user_id: int
+    name: str
     status: PartyMemberStatus = PartyMemberStatus.NEUTRAL
 
 
@@ -75,11 +76,7 @@ class PartyService:
         party = Party(
             uuid=party_uuid,
             owner_id=user.id,
-            members=[
-                PartyMember(
-                    user_id=user.id,
-                )
-            ],
+            members=[PartyMember(user_id=user.id, name=user.name)],
             **party_kwargs,
         )
         self.parties[party_uuid] = party
