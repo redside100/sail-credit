@@ -1,3 +1,4 @@
+import math
 import time
 from typing import List
 from uuid import UUID
@@ -8,7 +9,7 @@ from party import Party, PartyMember, PartyService, PartyStatus
 from util import create_embed, disable_buttons_and_stop_view
 
 
-class ReportView(discord.ui.View):
+class ReportSelectView(discord.ui.View):
     def __init__(self, party: Party, user_id: int):
         self.party = party
         super().__init__(timeout=60)  # 1m
@@ -27,9 +28,65 @@ class ReportView(discord.ui.View):
     async def select_user(self, interaction: discord.Interaction):
         selected_id = self.select.values[0]
 
+        self.acquittals = 0
+        self.convictions = 0
+
+        view = ReportView(self.party)
         await interaction.response.send_message(
-            f"Selected <@{selected_id}>", ephemeral=True
+            content=f" <@{selected_id}> has been reported.",
+            embed=create_embed(view.generate_embed()),
+            view=view,
+            ephemeral=False,
+            allowed_mentions=discord.AllowedMentions(),
         )
+
+
+class ReportView(discord.ui.View):
+    def __init__(self, party: Party):
+        self.party = party
+        self.convict_votes = 0
+        self.acquit_votes = 0
+        super().__init__(timeout=300)  # 5m
+
+    def generate_embed(self) -> str:
+        self.votes_needed = math.ceil(self.party.size / 2)
+        convict_ratio = f"`{self.convict_votes}` / `{self.votes_needed}`"
+        acquit_ratio = f"`{self.acquit_votes}` / `{self.votes_needed}`"
+        content = f"{convict_ratio} to convict.\n{acquit_ratio} to acquit."
+        return content
+
+    @discord.ui.button(label="Convict", style=discord.ButtonStyle.red)
+    async def convict(self, interaction: discord.Interaction, _):
+
+        pass
+        # if not interaction.user.id == self.party.owner_id:
+        #     await interaction.response.send_message(
+        #         "Only the party leader can use this button!", ephemeral=True
+        #     )
+        #     return
+
+        # await interaction.response.defer()
+
+        # # Notify all party members.
+        # party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
+        # original_message = await interaction.original_response()
+        # await original_message.reply(
+        #     content="".join(party_mentions),
+        #     embed=create_embed(
+        #         f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\nFor the next 5 minutes, any party member can click the **Report** button to report a flaker."
+        #     ),
+        #     view=PostPartyView(self.party),
+        # )
+
+        # # This party has started, so mark it.
+        # self.party.status = PartyStatus.STARTED
+
+        # self.party_service.remove_party(self.party.uuid)
+        # self.stop()
+
+    @discord.ui.button(label="Acquit", style=discord.ButtonStyle.green)
+    async def aquit(self, interaction: discord.Interaction, _):
+        pass
 
 
 class PostPartyView(discord.ui.View):
@@ -47,7 +104,7 @@ class PostPartyView(discord.ui.View):
     async def report(self, interaction: discord.Interaction, _):
         await interaction.response.send_message(
             content="Who do you want to report?",
-            view=ReportView(self.party, interaction.user.id),
+            view=ReportSelectView(self.party, interaction.user.id),
             ephemeral=True,
         )
 
