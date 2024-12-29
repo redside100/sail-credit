@@ -179,7 +179,6 @@ class PostPartyView(discord.ui.View):
             and self.party.status != PartyStatus.FAILED
         ):
             self.party.status = PartyStatus.SUCCESS
-            print("Good party.")
             await disable_buttons_and_stop_view(self, self.message)
             await self.message.edit(
                 embed=create_embed(f"The party was a success! 🎉"),
