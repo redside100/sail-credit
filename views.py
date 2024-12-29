@@ -28,49 +28,70 @@ class PartyView(discord.ui.View):
     This view is responsible for removing the party on timeout, or start.
     """
 
-    def __init__(self, party: Party, party_service: PartyService):
+    def __init__(self, party: Party, party_service: PartyService, scheduled=True):
         self.party: Party = party
         self.party_service = party_service
         super().__init__(timeout=60 * 60)  # 1 hr
 
-        def callback_constructor(minutes: int):
-            async def button_callback(interaction: discord.Interaction):
-                if interaction.user.id != self.party.owner_id:
-                    await interaction.response.send_message(
-                        "Only the party leader can use this button!", ephemeral=True
+        # Start, join, leave, cancel buttons
+        start_button = discord.ui.Button(label="Start", style=discord.ButtonStyle.green)
+        join_button = discord.ui.Button(label="Join", style=discord.ButtonStyle.blurple)
+        leave_button = discord.ui.Button(label="Leave", style=discord.ButtonStyle.red)
+        cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.red)
+
+        start_button.callback = self.start
+        join_button.callback = self.join
+        leave_button.callback = self.leave
+        cancel_button.callback = self.cancel
+
+        self.add_item(start_button)
+
+        # Not scheduled if the job already ran and did not autostart.
+        # Leave out join/leave buttons
+        if scheduled:
+            self.add_item(join_button)
+            self.add_item(leave_button)
+
+        self.add_item(cancel_button)
+
+        # Leave out time adjustment buttons if not scheduled.
+        if scheduled:
+
+            def callback_constructor(minutes: int):
+                async def button_callback(interaction: discord.Interaction):
+                    if interaction.user.id != self.party.owner_id:
+                        await interaction.response.send_message(
+                            "Only the party leader can use this button!", ephemeral=True
+                        )
+                        return
+
+                    self.party_service.update_party_start_time(self.party.uuid, minutes)
+                    await interaction.response.defer()
+                    await interaction.edit_original_response(
+                        embed=create_embed(self.party.generate_embed())
                     )
-                    return
 
-                self.party_service.update_party_start_time(self.party.uuid, minutes)
-                await interaction.response.defer()
-                await interaction.edit_original_response(
-                    embed=create_embed(self.party.generate_embed())
+                return button_callback
+
+            # Add time adjustment buttons
+            for val in [
+                ("-15m", -15),
+                ("+5m", 5),
+                ("+15m", 15),
+                ("+1h", 60),
+            ]:
+                button = discord.ui.Button(
+                    label=val[0], style=discord.ButtonStyle.gray, row=1
                 )
-
-            return button_callback
-
-        # Add time adjustment buttons
-        for val in [
-            ("-5m", -5),
-            ("-15m", -15),
-            ("-1h", -60),
-            ("+5m", 5),
-            ("+15m", 15),
-            ("+1h", 60),
-        ]:
-            button = discord.ui.Button(
-                label=val[0], style=discord.ButtonStyle.gray, row=1 if val[1] < 0 else 2
-            )
-            button.callback = callback_constructor(val[1])
-            self.add_item(button)
+                button.callback = callback_constructor(val[1])
+                self.add_item(button)
 
     # When this view is inactive, remove the party.
     async def on_timeout(self):
         # TODO: Fix cancer. Pass in self-referential message, and then cancel.
         self.party_service.remove_party(self.party.uuid)
 
-    @discord.ui.button(label="Start", style=discord.ButtonStyle.green)
-    async def start(self, interaction: discord.Interaction, _):
+    async def start(self, interaction: discord.Interaction):
 
         if not interaction.user.id == self.party.owner_id:
             await interaction.response.send_message(
@@ -95,11 +116,10 @@ class PartyView(discord.ui.View):
         # Notify all party members.
         party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
 
-        original_message = await interaction.original_response()
         report_msg = "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
 
         next_view = PostPartyView(self.party, None)
-        next_view.message = await original_message.reply(
+        next_view.message = await interaction.followup.send(
             content="The party has started! Come join "
             + ", ".join(party_mentions)
             + ".",
@@ -112,8 +132,7 @@ class PartyView(discord.ui.View):
         self.party_service.remove_party(self.party.uuid)
         await disable_buttons_and_stop_view(self, interaction)
 
-    @discord.ui.button(label="Join", style=discord.ButtonStyle.blurple)
-    async def join(self, interaction: discord.Interaction, _):
+    async def join(self, interaction: discord.Interaction):
 
         # Check if the user is already in the party.
         party_member_ids = [member.user_id for member in self.party.members]
@@ -141,8 +160,7 @@ class PartyView(discord.ui.View):
             embed=create_embed(self.party.generate_embed())
         )
 
-    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red)
-    async def leave(self, interaction: discord.Interaction, _):
+    async def leave(self, interaction: discord.Interaction):
 
         # Check if the user is in the party.
         party_member_ids = [member.user_id for member in self.party.members]
@@ -176,8 +194,7 @@ class PartyView(discord.ui.View):
             ),
         )
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, _):
+    async def cancel(self, interaction: discord.Interaction):
 
         # Check if the user is the leader.
         if interaction.user.id != self.party.owner_id:

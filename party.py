@@ -8,6 +8,8 @@ import discord
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta, timezone
 
+from util import create_embed, disable_buttons_and_stop_view
+
 
 class PartyStatus(Enum):
     ASSEMBLING = "ASSEMBLING"  # Finding members for the party.
@@ -36,16 +38,18 @@ class Party:
     name: str
     owner_id: Optional[int]
     creation_time: int
-    start_time: int
-    message: Optional[discord.Message] = None
+    start_time: Optional[int]
+    interaction: Optional[discord.Interaction] = None
+    jump_url: Optional[str] = None
     size: int = 5
     status: PartyStatus = PartyStatus.ASSEMBLING
     description: str = ""
     members: list[PartyMember] = field(default_factory=[])
 
     def generate_embed(self) -> str:
+        start_string = f"\n\nStarts: <t:{self.start_time}:R>" if self.start_time else ""
         content = (
-            f"`{self.size - len(self.members)}` spots left.\n\nStarts: <t:{self.start_time}:R>\n\n"
+            f"`{self.size - len(self.members)}` spots left.{start_string}\n\n"
             + f"Current Party:\n"
         )
         for member in self.members:
@@ -86,7 +90,7 @@ class PartyService:
         # add start job to scheduler with default 5 mins
         run_date = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
         self.scheduler.add_job(
-            self.start_scheduled_party,
+            self._start_scheduled_party,
             "date",
             args=[party_uuid],
             run_date=run_date,
@@ -104,9 +108,63 @@ class PartyService:
         self.parties[party_uuid] = party
         return party
 
-    async def start_scheduled_party(self, uuid: UUID) -> None:
-        print(f"Job running {uuid}!")
-        pass
+    async def _start_scheduled_party(self, uuid: UUID) -> None:
+
+        # Locally import here to avoid circular imports.
+        # This is fine since this private function is only called internally.
+        from views import PostPartyView, PartyView
+
+        party = self.get_party(uuid)
+        print(f"Running job {uuid}!")
+
+        # If for any reason the party doesn't exist anymore, do nothing.
+        if not party:
+            return
+
+        interaction = party.interaction
+        # If for any reason the party doesn't have an interaction instance, do nothing.
+        if not interaction:
+            return
+
+        # Copy pasta -> transformed logic from the view.
+        # Slightly stricter requirements here, the party needs to be full to auto start.
+        # If not, the party can still be started manually.
+        if len(party.members) < party.size:
+            await interaction.followup.send(
+                f"<@{party.owner_id}> This party wasn't started automatically since it isn't full. You can still start it manually by clicking **Start** in the original message!"
+            )
+            # Setting start_time to None will cause the party embed to not include a starting timestamp
+            party.start_time = None
+
+            # Edit the original message to reflect it
+            await interaction.edit_original_response(
+                embed=create_embed(party.generate_embed()),
+                view=PartyView(party, self, scheduled=False),
+            )
+            return
+
+        # Notify all party members.
+        party_mentions = [f"<@{member.user_id}>" for member in party.members]
+
+        report_msg = "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
+
+        next_view = PostPartyView(party, None)
+        next_view.message = await interaction.followup.send(
+            content="The party has started! Come join "
+            + ", ".join(party_mentions)
+            + ".",
+            embed=create_embed(
+                f"The party was started **automatically** for <@&{party.role.id}>!\n\n{report_msg}"
+            ),
+            view=next_view,
+        )
+
+        self.remove_party(party.uuid)
+
+        message = await interaction.original_response()
+        await disable_buttons_and_stop_view(
+            discord.ui.View().from_message(message), interaction
+        )
 
     def get_party(self, uuid: UUID) -> Optional[Party]:
         return self.parties.get(uuid)

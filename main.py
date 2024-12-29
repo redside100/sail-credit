@@ -58,13 +58,14 @@ async def create_party(
         size=size,
         description=description,
         creation_time=creation_time,
+        interaction=interaction,
     )
 
     content = f"<@{interaction.user.id}> has created a party for <@&{role.id}>!\n"
     if party.description:
         content += f"Description: `{party.description}`\n"
 
-    message = await interaction.response.send_message(
+    await interaction.response.send_message(
         content=content,
         embed=create_embed(party.generate_embed()),
         view=PartyView(party, party_service),
@@ -72,8 +73,9 @@ async def create_party(
         allowed_mentions=discord.AllowedMentions(),
     )
 
-    # Save a message instance in the party object.
-    party.message = message
+    # Get the jump URL (message link) for the party for management commands
+    message = await interaction.original_response()
+    party.jump_url = message.jump_url
 
 
 @bot.tree.command(name="book")
@@ -86,9 +88,9 @@ async def book(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
     global party_service
     party_service = PartyService()
+    await bot.tree.sync()
     print("Ready!")
 
 

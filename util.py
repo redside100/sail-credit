@@ -2,7 +2,6 @@ import functools
 from typing import Optional
 import discord
 import db
-from party import Party
 
 
 def user_command():
@@ -36,29 +35,15 @@ def create_embed(message: str, title: Optional[str] = None):
     return embed
 
 
-# TODO
-async def calculate_sail_credit_delta(
-    party: Party, user_id: int, current_ssc: int, flaked=False
-):
-    HISTORY_WINDOW = 86400 * 10  # 10 days
-
-    ssc_log = await db.get_user_sail_credit_log(user_id, lookback=HISTORY_WINDOW)
-    flakes = 0
-    for entry in ssc_log:
-        if entry["new_sail_credit"] - entry["old_sail_credit"] < 0:
-            flakes += 1
-
-    flake_ratio = flakes / len(ssc_log)
-
-
 async def disable_buttons_and_stop_view(
-    view: discord.ui.View, obj: discord.Interaction | discord.Message
+    view: discord.ui.View,
+    obj: discord.Interaction | discord.Message | discord.WebhookMessage,
 ):
     for component in view.children:
         if isinstance(component, discord.ui.Button):
             component.disabled = True
 
-    if type(obj) == discord.Message:
+    if type(obj) == discord.Message or type(obj) == discord.WebhookMessage:
         await obj.edit(view=view)
     elif type(obj) == discord.Interaction:
         await obj.edit_original_response(view=view)
