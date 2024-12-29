@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 
 from util import create_embed, disable_buttons_and_stop_view
 
+STARTING_SSC = 1000
+
 
 class PartyStatus(Enum):
     ASSEMBLING = "ASSEMBLING"  # Finding members for the party.

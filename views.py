@@ -10,6 +10,7 @@ from party import Party, PartyMember, PartyMemberStatus, PartyService, PartyStat
 from sail_bank import SailBank
 from util import create_embed, disable_buttons_and_stop_view
 
+bank = SailBank()
 """
 View Workflow for Parties
 
@@ -232,10 +233,17 @@ class PostPartyView(discord.ui.View):
             and self.party.status != PartyStatus.FAILED
         ):
             self.party.status = PartyStatus.SUCCESS
+            reward_data = await bank.process_party_reward(self.party)
             await disable_buttons_and_stop_view(self, self.message)
             await self.message.edit(
-                embed=create_embed(f"The party was a success! 🎉"),
+                embed=create_embed(self.generate_embed(reward_data)),
             )
+
+    def generate_embed(self, reward_data: dict[str, int]) -> str:
+        content = "The party was a success! 🎉\n\n"
+        for user_id, reward in reward_data.items():
+            content += f"- <@{user_id}> received {reward} SSC.\n"
+        return content
 
     async def interaction_check(self, interaction: discord.Interaction):
         # Only allow party members to interact with this view.

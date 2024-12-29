@@ -2,6 +2,8 @@ import time
 from typing import Any, Dict, List, Optional
 import aiosqlite
 
+import party
+
 db = None
 
 
@@ -29,7 +31,7 @@ async def create_user(discord_id: int) -> Dict[str, Any]:
         "INSERT INTO users (discord_id, sail_credit) VALUES (?, 600)", (discord_id,)
     )
     await db.commit()
-    return {"discord_id": discord_id, "sail_credit": 600}
+    return {"discord_id": discord_id, "sail_credit": party.STARTING_SSC}
 
 
 async def get_user(discord_id: int) -> Optional[Dict[str, Any]]:
