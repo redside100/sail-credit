@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Dict, Optional
 from enum import Enum
 from uuid import UUID, uuid4
 from discord import User, Member
@@ -29,7 +29,7 @@ class Party:
     uuid: UUID
     role: discord.Role
     name: str
-    owner_id: int
+    owner_id: Optional[int]
     size: int = 5
     status: PartyStatus = PartyStatus.ACTIVE
     description: str = ""
@@ -46,11 +46,13 @@ class Party:
 
     def leave_party(self, user_id: int):
         self.members = [member for member in self.members if member.user_id != user_id]
+        if user_id == self.owner_id:
+            self.owner_id = self.members[0].user_id if self.members else None
 
 
 class PartyService:
     def __init__(self):
-        self.parties: list[Party] = []
+        self.parties: Dict[UUID, Party] = {}
 
     def create_party(
         self,
@@ -68,8 +70,9 @@ class PartyService:
             role_id = party_kwargs["role"]
             party_kwargs["name"] = f"{user.name}'s <@&{role_id}> Party"
 
+        party_uuid = uuid4()
         party = Party(
-            uuid=uuid4(),
+            uuid=party_uuid,
             owner_id=user.id,
             members=[
                 PartyMember(
@@ -78,11 +81,12 @@ class PartyService:
             ],
             **party_kwargs,
         )
-        self.parties.append(party)
+        self.parties[party_uuid] = party
         return party
 
-    def get_party(self, uuid: UUID):
-        for party in self.parties:
-            if party.uuid == uuid:
-                return party
-        return None
+    def get_party(self, uuid: UUID) -> Optional[Party]:
+        return self.parties.get(uuid)
+
+    def remove_party(self, uuid: UUID) -> None:
+        if uuid in self.parties:
+            del self.parties[uuid]

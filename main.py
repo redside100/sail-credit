@@ -7,7 +7,7 @@ import db
 from party import Party, PartyService
 import config
 from util import user_command, create_embed
-from views import PartyView
+from views import MessageBook, PartyView
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -66,9 +66,17 @@ async def create_party(
     await interaction.response.send_message(
         content=content,
         embed=create_embed(party.generate_embed()),
-        view=PartyView(party),
+        view=PartyView(party, party_service),
         ephemeral=False,
         allowed_mentions=discord.AllowedMentions(),
+    )
+
+
+@bot.tree.command(name="book")
+async def book(interaction: discord.Interaction):
+    pages = [create_embed("foo"), create_embed("bar"), create_embed("ice")]
+    await interaction.response.send_message(
+        embed=pages[0], view=MessageBook(pages=pages, user_id=interaction.user.id)
     )
 
 
