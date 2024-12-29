@@ -42,6 +42,7 @@ async def ping(interaction: discord.Interaction, foo: str, bar: int):
     size="The size of the party (default is 5)",
     description="Any additional information you want to provide about the party.",
 )
+@user_command()
 async def create_party(
     interaction: discord.Interaction,
     type: str,
