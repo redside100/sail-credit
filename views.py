@@ -60,7 +60,7 @@ class ReportView(discord.ui.View):
 
         # Convict Button
         self.convict_button = discord.ui.Button(
-            label="Acquit", style=discord.ButtonStyle.green
+            label="Convict", style=discord.ButtonStyle.red
         )
 
         async def convict_callback(*args, **kwargs):
@@ -72,7 +72,7 @@ class ReportView(discord.ui.View):
 
         # Acquit Button
         self.acquit_button = discord.ui.Button(
-            label="Convict", style=discord.ButtonStyle.red
+            label="Acquit", style=discord.ButtonStyle.green
         )
 
         async def acquit_callback(*args, **kwargs):
