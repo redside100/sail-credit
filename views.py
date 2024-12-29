@@ -23,6 +23,15 @@ class PartyView(discord.ui.View):
             )
             return
 
+        # Check if the party is full.
+        # TODO: In the future, people can still join parties which are full but are
+        # waitlisted.
+        if len(self.party.members) >= self.party.size:
+            await interaction.response.send_message(
+                "The party is full.", ephemeral=True
+            )
+            return
+
         self.party.members.append(PartyMember(user_id=interaction.user.id))
 
         await interaction.response.defer()
