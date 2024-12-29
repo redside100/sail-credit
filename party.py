@@ -7,11 +7,10 @@ import discord
 
 
 class PartyStatus(Enum):
-    ACTIVE = "ACTIVE"
-    STARTED = "STARTED"
-    VOTING = "VOTING"
-    INACTIVE = "INACTIVE"
-    DELETED = "DELETED"
+    ASSEMBLING = "ASSEMBLING"  # Finding members for the party.
+    SUCCESS = "SUCCESS"  # Success! The party hasn't reported anyone flaking.
+    VOTING = "VOTING"  # Somebody stands trials for flaking.
+    FAILED = "FAILED"  # The party did not go through.
 
 
 class PartyMemberStatus(Enum):
@@ -35,7 +34,7 @@ class Party:
     owner_id: Optional[int]
     creation_time: int
     size: int = 5
-    status: PartyStatus = PartyStatus.ACTIVE
+    status: PartyStatus = PartyStatus.ASSEMBLING
     description: str = ""
     members: list[PartyMember] = field(default_factory=[])
 
