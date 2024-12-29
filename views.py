@@ -109,21 +109,19 @@ class ReportView(discord.ui.View):
             return
 
         if len(self.acquit_votes) >= self.votes_needed:
-            content = f"<@{self.reported_id}> has been ACQUITTEDy! 🎉"
-
+            content = f"<@{self.reported_id}> has been ACQUITTED! 🎉"
+            await interaction.edit_original_response(content=content)
             # TODO: SSC gains.
 
         if len(self.convict_votes) >= self.votes_needed:
             content = f"<@{self.reported_id}> has been CONVICTED! 🔨"
-
+            await interaction.edit_original_response(content=content)
             # TODO: SSC deductions.
 
+        # The party is no longer voting.
         self.party.status = PartyStatus.INACTIVE
-        self.acquit_button.disabled = True
-        self.convict_button.disabled = True
-        message = interaction.message
-        await interaction.message.edit(content=message.content, view=self)
-        await interaction.edit_original_response(content=content)
+
+        await disable_buttons_and_stop_view(self, interaction)
 
     async def on_convict(self, interaction: discord.Interaction):
         # Check if the user is in the party.
