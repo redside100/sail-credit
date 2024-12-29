@@ -377,7 +377,7 @@ class ReportView(discord.ui.View):
         if len(self.convict_votes) >= self.votes_needed:
             content = f"<@{self.reported_id}> has been CONVICTED! 🔨"
             await interaction.edit_original_response(content=content)
-            # TODO: SSC deductions.
+            bank.process_flaked_user(self.party, self.reported_id)
 
         # The party is no longer voting.
         self.party.status = PartyStatus.FAILED
