@@ -1,12 +1,11 @@
 import asyncio
 import time
-from typing import Literal, Optional
+from typing import Optional
 from discord import app_commands
 import discord
 from discord.ext import commands
 import db
 from party import Party, PartyService
-import config
 from util import user_command, create_embed
 from views import MessageBook, PartyView
 

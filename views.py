@@ -321,6 +321,27 @@ class PartyView(discord.ui.View):
             ),
         )
 
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, _):
+
+        # Check if the user is the leader.
+        if interaction.user.id != self.party.owner_id:
+            await interaction.response.send_message(
+                "Only the party leader can use this button!", ephemeral=True
+            )
+            return
+
+        self.party_service.remove_party(self.party.uuid)
+        await interaction.response.defer()
+
+        await interaction.edit_original_response(
+            embed=create_embed(
+                f"This party was cancelled by the party leader <@{interaction.user.id}>."
+            ),
+            content=None,
+        )
+        await disable_buttons_and_stop_view(self, interaction)
+
 
 """
 General use view for showing multi-page content.

@@ -1,6 +1,0 @@
-# Supported party types which will receive a role ping upon Party creation.
-SUPPORTED_PARTY_TYPES = {
-    "VALORANT": "1322682016860471306",
-    "VALO": "1322682016860471306",
-    "VAL": "1322682016860471306",
-}
