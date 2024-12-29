@@ -5,7 +5,7 @@ import discord
 
 import db
 from party import Party, PartyMember, PartyService, PartyStatus
-from util import create_embed
+from util import create_embed, disable_buttons_and_stop_view
 
 
 class ReportView(discord.ui.View):
@@ -99,7 +99,8 @@ class PartyView(discord.ui.View):
         self.party.status = PartyStatus.STARTED
 
         self.party_service.remove_party(self.party.uuid)
-        self.stop()
+
+        await disable_buttons_and_stop_view(self, interaction)
 
     @discord.ui.button(label="Join", style=discord.ButtonStyle.blurple)
     async def join(self, interaction: discord.Interaction, _):
@@ -151,9 +152,8 @@ class PartyView(discord.ui.View):
             await interaction.edit_original_response(
                 embed=create_embed("This party was abandoned since everyone left."),
                 content=None,
-                view=None,
             )
-            self.stop()
+            await disable_buttons_and_stop_view(self, interaction)
             return
 
         await interaction.edit_original_response(

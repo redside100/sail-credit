@@ -32,11 +32,11 @@ class Party:
     role: discord.Role
     name: str
     owner_id: Optional[int]
+    creation_time: int
     size: int = 5
     status: PartyStatus = PartyStatus.ACTIVE
     description: str = ""
     members: list[PartyMember] = field(default_factory=[])
-    creation_time: int
 
     def generate_embed(self) -> str:
         content = (

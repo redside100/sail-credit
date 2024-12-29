@@ -49,3 +49,12 @@ async def calculate_sail_credit_delta(
             flakes += 1
 
     flake_ratio = flakes / len(ssc_log)
+
+
+async def disable_buttons_and_stop_view(
+    view: discord.ui.View, interaction: discord.Interaction
+):
+    for component in view.children:
+        if isinstance(component, discord.ui.Button):
+            component.disabled = True
+    await interaction.edit_original_response(view=view)
