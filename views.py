@@ -5,17 +5,18 @@ from uuid import UUID
 import discord
 
 import db
-from party import Party, PartyMember, PartyService, PartyStatus
+from party import Party, PartyMember, PartyMemberStatus, PartyService, PartyStatus
 from util import create_embed, disable_buttons_and_stop_view
 
 
 class ReportSelectView(discord.ui.View):
     def __init__(self, party: Party, reporter_id: int):
         self.party = party
+        self.party.status = PartyStatus.VOTING
         self.reporter_id = reporter_id
         super().__init__(timeout=60)  # 1m
 
-        self.select = discord.ui.Select(placeholder="Select a user...")
+        self.select = discord.ui.Select(placeholder=f"Select a user...")
         self.select.callback = self.select_user
         self.select.options = [
             discord.SelectOption(label=member.name, value=member.user_id)
@@ -25,8 +26,20 @@ class ReportSelectView(discord.ui.View):
         self.add_item(self.select)
 
     async def select_user(self, interaction: discord.Interaction):
-        selected_id = self.select.values[0]
-        view = ReportView(self.party)
+        selected_id = int(self.select.values[0])
+
+        # Check if the party member has already been reported.
+        selected_member = next(
+            (member for member in self.party.members if member.user_id == selected_id),
+            None,
+        )
+        if selected_member.status == PartyMemberStatus.FLAKED:
+            await interaction.response.send_message(
+                "This user has already been reported.", ephemeral=True
+            )
+            return
+
+        view = ReportView(self.party, selected_id)
         await interaction.response.send_message(
             content=f" <@{selected_id}> has been reported by <@{self.reporter_id}>.",
             embed=create_embed(view.generate_embed()),
@@ -34,14 +47,47 @@ class ReportSelectView(discord.ui.View):
             ephemeral=False,
             allowed_mentions=discord.AllowedMentions(),
         )
+        self.stop()
 
 
 class ReportView(discord.ui.View):
-    def __init__(self, party: Party):
+    def __init__(self, party: Party, reported_id: int):
         self.party = party
+        self.reported_id = reported_id
         self.convict_votes = []
         self.acquit_votes = []
         super().__init__(timeout=300)  # 5m
+
+        # Convict Button
+        self.convict_button = discord.ui.Button(
+            label="Acquit", style=discord.ButtonStyle.green
+        )
+
+        async def convict_callback(*args, **kwargs):
+            await self.on_convict(*args, **kwargs)
+            await self.tally_votes(*args, **kwargs)
+
+        self.convict_button.callback = convict_callback
+        self.add_item(self.convict_button)
+
+        # Acquit Button
+        self.acquit_button = discord.ui.Button(
+            label="Convict", style=discord.ButtonStyle.red
+        )
+
+        async def acquit_callback(*args, **kwargs):
+            await self.on_acquit(*args, **kwargs)
+            await self.tally_votes(*args, **kwargs)
+
+        self.acquit_button.callback = acquit_callback
+        self.add_item(self.acquit_button)
+
+        # Declare the member as flaked.
+        reported_member = next(
+            (member for member in self.party.members if member.user_id == reported_id),
+            None,
+        )
+        reported_member.status = PartyMemberStatus.FLAKED
 
     def generate_embed(self) -> str:
         self.votes_needed = math.ceil(self.party.size / 2)
@@ -50,8 +96,36 @@ class ReportView(discord.ui.View):
         content = f"{convict_ratio} to convict.\n{acquit_ratio} to acquit."
         return content
 
-    @discord.ui.button(label="Convict", style=discord.ButtonStyle.red)
-    async def convict(self, interaction: discord.Interaction, _):
+    async def tally_votes(self, interaction: discord.Interaction):
+        """
+        Post-processing for votes. If the votes are enough to convict or acquit, end the
+        vote.
+        """
+        # Check if the vote ends.
+        if (
+            len(self.acquit_votes) < self.votes_needed
+            and len(self.convict_votes) < self.votes_needed
+        ):
+            return
+
+        if len(self.acquit_votes) >= self.votes_needed:
+            content = f"<@{self.reported_id}> has been ACQUITTEDy! 🎉"
+
+            # TODO: SSC gains.
+
+        if len(self.convict_votes) >= self.votes_needed:
+            content = f"<@{self.reported_id}> has been CONVICTED! 🔨"
+
+            # TODO: SSC deductions.
+
+        self.party.status = PartyStatus.INACTIVE
+        self.acquit_button.disabled = True
+        self.convict_button.disabled = True
+        message = interaction.message
+        await interaction.message.edit(content=message.content, view=self)
+        await interaction.edit_original_response(content=content)
+
+    async def on_convict(self, interaction: discord.Interaction):
         # Check if the user is in the party.
         party_member_ids = [member.user_id for member in self.party.members]
         if interaction.user.id not in party_member_ids:
@@ -78,8 +152,7 @@ class ReportView(discord.ui.View):
             embed=create_embed(self.generate_embed())
         )
 
-    @discord.ui.button(label="Acquit", style=discord.ButtonStyle.green)
-    async def aquit(self, interaction: discord.Interaction, _):
+    async def on_acquit(self, interaction: discord.Interaction):
         # Check if the user is in the party.
         party_member_ids = [member.user_id for member in self.party.members]
         if interaction.user.id not in party_member_ids:
@@ -91,7 +164,7 @@ class ReportView(discord.ui.View):
         # Check if the user has already voted.
         if interaction.user.id in self.acquit_votes:
             await interaction.response.send_message(
-                "You have already voted to convict.", ephemeral=True
+                "You have already voted to acquit.", ephemeral=True
             )
             return
 
@@ -120,6 +193,15 @@ class PostPartyView(discord.ui.View):
 
     @discord.ui.button(label="Report", style=discord.ButtonStyle.red)
     async def report(self, interaction: discord.Interaction, _):
+
+        # Check party status
+        if self.party.status == PartyStatus.VOTING:
+            await interaction.response.send_message(
+                "Voting has already started. Please wait for the current vote to end.",
+                ephemeral=True,
+            )
+            return
+
         await interaction.response.send_message(
             content="Who do you want to report?",
             view=ReportSelectView(self.party, interaction.user.id),
