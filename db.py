@@ -46,6 +46,14 @@ async def get_user(discord_id: int) -> Optional[Dict[str, Any]]:
         return row
 
 
+async def set_user(discord_id: int, sail_credit: int) -> None:
+    await db.execute(
+        "UPDATE users SET sail_credit = ? WHERE discord_id = ?",
+        (sail_credit, discord_id),
+    )
+    await db.commit()
+
+
 async def get_user_sail_credit_log(
     discord_id: int, lookback: int
 ) -> List[Dict[str, Any]]:
@@ -61,14 +69,41 @@ async def get_user_sail_credit_log(
 
 
 async def change_and_log_sail_credit(
-    discord_id: int, party_size: int, party_lifetime: int, old_ssc: int, new_ssc: int
+    discord_id: int,
+    party_size: int,
+    party_created_at: int,
+    party_finished_at: int,
+    old_ssc: int,
+    new_ssc: int,
 ) -> None:
     timestamp = int(time.time())
     await db.execute(
-        "INSERT INTO sail_credit_log VALUES (?, ?, ?, ?, ?, ?)",
-        (discord_id, party_size, party_lifetime, old_ssc, new_ssc, timestamp),
+        "INSERT INTO sail_credit_log VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            discord_id,
+            party_size,
+            party_created_at,
+            party_finished_at,
+            old_ssc,
+            new_ssc,
+            timestamp,
+        ),
     )
     await db.execute(
         "UPDATE users SET sail_credit = ? WHERE discord_id = ?", (new_ssc, discord_id)
     )
     await db.commit()
+
+
+async def get_all_users() -> List[Dict[str, Any]]:
+    async with db.execute("SELECT * FROM users") as cursor:
+        rows = await cursor.fetchall()
+        return rows
+
+
+async def get_sail_credit_logs() -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT * FROM sail_credit_log ORDER BY timestamp DESC"
+    ) as cursor:
+        rows = await cursor.fetchall()
+        return rows

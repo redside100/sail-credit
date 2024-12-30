@@ -233,6 +233,7 @@ class PostPartyView(discord.ui.View):
             and self.party.status != PartyStatus.FAILED
         ):
             self.party.status = PartyStatus.SUCCESS
+            self.party.finished_at = int(time.time())
             reward_data = await bank.process_party_reward(self.party)
             await disable_buttons_and_stop_view(self, self.message)
             await self.message.edit(
@@ -367,6 +368,9 @@ class ReportView(discord.ui.View):
             and len(self.convict_votes) < self.votes_needed
         ):
             return
+
+        # Mark the time the party was finished.
+        self.party.finished_at = int(time.time())
 
         # Otherwise calculate the results of the vote.
         if len(self.acquit_votes) >= self.votes_needed:

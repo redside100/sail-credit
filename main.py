@@ -51,14 +51,14 @@ async def create_party(
     size: Optional[int],
     description: Optional[str],
 ):
-    creation_time = int(time.time())
+    created_at = int(time.time())
     party: Party = party_service.create_party(
         user=interaction.user,
         role=role,
         name=name,
         size=size,
         description=description,
-        creation_time=creation_time,
+        created_at=created_at,
         interaction=interaction,
     )
 

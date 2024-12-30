@@ -144,8 +144,6 @@ class SailBank:
         Process the reward for each player in the party. Returns a dictionary of user
         IDs and the amount of sail credit they received.
         """
-        party_age = party.creation_time - int(time.time())
-
         data = {}
         for member in party.members:
             user = await db.get_user(member.user_id)
@@ -160,7 +158,7 @@ class SailBank:
             await db.change_and_log_sail_credit(
                 member.user_id,
                 party.size,
-                party_age,
+                party.finished_at - party.created_at,
                 user["sail_credit"],
                 user["sail_credit"] + reward,
             )
@@ -183,22 +181,20 @@ class SailBank:
             if entry["new_sail_credit"] - entry["prev_sail_credit"] < 0:
                 days_flaked.add(round_nearest_day(entry["timestamp"]))
 
-        # Calculate lifetime of the party.
-        party_age = party.creation_time - int(time.time())
-
         # Calculate the penalty for flaking.
         penalty = await self.debit(
             user_id,
             user["sail_credit"],
             len(days_flaked),
-            party_age,
+            party.finished_at - party.created_at,
             party.size,
         )
 
         await db.change_and_log_sail_credit(
             user_id,
             party.size,
-            party_age,
+            party.created_at,
+            party.finished_at,
             user["sail_credit"],
             user["sail_credit"] + penalty,
         )
