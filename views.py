@@ -516,3 +516,14 @@ class MessageBook(discord.ui.View):
     async def update_page(self, interaction: discord.Interaction):
         await interaction.response.defer()
         await interaction.edit_original_response(embed=self.pages[self.current_page])
+
+
+class LeaderboardView(MessageBook):
+    def __init__(self, user_id: int, pages: List[discord.Embed], me_page: int):
+        self.me_page = me_page
+        super().__init__(user_id, pages)
+
+    @discord.ui.button(label="Jump to me", style=discord.ButtonStyle.grey)
+    async def jump(self, interaction: discord.Interaction, _):
+        self.current_page = self.me_page
+        await self.update_page(interaction)

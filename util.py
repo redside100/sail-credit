@@ -1,7 +1,9 @@
 import functools
-from typing import Optional
+from typing import Literal, Optional
 import discord
+from pytimeparse import parse as timeparse
 import db
+from quickchart import QuickChart
 
 
 def user_command():
@@ -78,3 +80,73 @@ async def disable_buttons_and_stop_view(
 def divide_chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i : i + n]
+
+
+def down_scale_data(qc_data, n=500):
+    if n > len(qc_data):
+        return qc_data
+
+    new_data = []
+    quantum = len(qc_data) / n
+    idx = 0
+    while round(idx) < len(qc_data):
+        new_data.append(qc_data[round(idx)])
+        idx += quantum
+
+    if round(idx) < len(qc_data) - 1:
+        new_data.append(qc_data[-1])
+
+    return new_data
+
+
+async def create_ssc_graph_url(
+    discord_id: str, name: str, period: Literal["1h", "6h", "12h", "1d", "7d", "30d"]
+) -> str:
+
+    lookback = timeparse(period)
+    credit_log = await db.get_user_sail_credit_log(discord_id, lookback)
+
+    qc_data = down_scale_data(
+        [{"x": d["timestamp"] * 1000, "y": d["new_sail_credit"]} for d in credit_log],
+        n=200,
+    )
+    qc = QuickChart()
+    qc.width = 500
+    qc.height = 300
+    qc.device_pixel_ratio = 2.0
+
+    qc.config = {
+        "type": "line",
+        "data": {"datasets": [{"fill": False, "data": qc_data}]},
+        "options": {
+            "elements": {"point": {"radius": 0}},
+            "legend": {
+                "display": False,
+            },
+            "title": {
+                "display": True,
+                "text": f"{name}'s SSC History",
+            },
+            "scales": {
+                "xAxes": [
+                    {
+                        "type": "time",
+                        "ticks": {
+                            "maxTicksLimit": 15,
+                        },
+                        "time": {
+                            "parser": "x",
+                            "displayFormats": {
+                                "hour": "MMM DD HH:mm",
+                                "minute": "MMM DD HH:mm",
+                                "second": "MMM DD HH:mm",
+                            },
+                        },
+                    }
+                ],
+                "yAxes": [{"ticks": {"precision": 0}}],
+            },
+        },
+    }
+
+    return qc.get_short_url()

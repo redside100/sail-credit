@@ -1,15 +1,15 @@
 import asyncio
 from dataclasses import asdict
 import time
-from typing import Optional
+from typing import Literal, Optional
 from discord import app_commands
 import discord
 from discord.ext import commands
 import db
 from party import Party, PartyService
 
-from util import divide_chunks, user_command, create_embed
-from views import PartyView, MessageBook
+from util import create_ssc_graph_url, divide_chunks, user_command, create_embed
+from views import LeaderboardView, PartyView, MessageBook
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -142,6 +142,7 @@ async def leaderboard(interaction: discord.Interaction):
     users = await db.get_ssc_leaderboard()
     chunks = divide_chunks(users, 10)
 
+    me_page_idx = 0
     for i, chunk in enumerate(chunks):
         page_contents = []
         for j, user in enumerate(chunk):
@@ -149,6 +150,10 @@ async def leaderboard(interaction: discord.Interaction):
             page_contents.append(
                 f"**#{rank}** <@{user['discord_id']}> ({user['sail_credit']} SSC)"
             )
+
+            if user["discord_id"] == interaction.user.id:
+                me_page_idx = i
+
         pages.append(
             create_embed(title="SSC Leaderboard", message="\n".join(page_contents))
         )
@@ -160,7 +165,10 @@ async def leaderboard(interaction: discord.Interaction):
         return
 
     await interaction.response.send_message(
-        embed=pages[0], view=MessageBook(user_id=interaction.user.id, pages=pages)
+        embed=pages[0],
+        view=LeaderboardView(
+            user_id=interaction.user.id, pages=pages, me_page=me_page_idx
+        ),
     )
 
 
@@ -168,8 +176,14 @@ async def leaderboard(interaction: discord.Interaction):
     name="ssc-graph", description="Check a graph of your SSC over a time period!"
 )
 @user_command()
-async def ssc_graph(interaction: discord.Interaction):
-    pass
+async def ssc_graph(
+    interaction: discord.Interaction,
+    period: Literal["1h", "6h", "12h", "1d", "7d", "30d"],
+):
+    graph_url = await create_ssc_graph_url(
+        interaction.user.id, interaction.user.display_name, period
+    )
+    await interaction.response.send_message(content=graph_url)
 
 
 @bot.event
