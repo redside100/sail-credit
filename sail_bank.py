@@ -18,7 +18,7 @@ class SailBank:
     BASE_REWARD = 20
 
     # How much sail credit to deduct from a user for flaking on a party.
-    FLAKE_PENALTY = 100
+    BASE_PENALTY = -300
 
     # How far back we check for previous parties, in seconds. Reward should be
     # decreased for each party joined within this time frame.
@@ -63,14 +63,14 @@ class SailBank:
             flake.
         """
         # 1. The base SSC to deduct for flaking.
-        penalty = self.FLAKE_PENALTY
-        log = f"[user-{user_id}]: DEBIT base-{self.FLAKE_PENALTY} SSC "
+        penalty = self.BASE_PENALTY
+        log = f"[user-{user_id}]: DEBIT base:{self.BASE_PENALTY} SSC "
 
-        # 2. Punish based on how many people were affected.x
-        # (less than group of 5 = 0.x) / (more than group of 5 = 1.x)
-        size_ratio = party_size / 5
+        # 2. Punish based on how many people were affected.
+        # (less than group of 5 = < 20% reduction) / (more than group of 5 = > 20% reduction)
+        size_ratio = 1 - 0.2 * (party_size / 5)
         penalty *= size_ratio
-        log += f"* size-{self._percent(size_ratio)}% "
+        log += f"* size:{self._percent(size_ratio)}% "
 
         # 3. Punish based on how long everybody waited.
         # Only applicable if greater than 30 minutes.
@@ -78,27 +78,28 @@ class SailBank:
         if party_age > 30 * 60:
             age_ratio = party_age / (30 * 60)
             penalty *= age_ratio
-            log += f"* age-{self._percent(age_ratio)}% "
+            log += f"* age:{self._percent(age_ratio)}% "
 
         # 4. Punished based on how many times the user has flaked in the past N days.
         # The more days that the user flaked on, increases the penalty by 50%. Flakes
         # on the same day are not affected.
         flake_ratio = 0.5 * flake_count + 1
         penalty *= flake_ratio
-        log += f"* flake-{self._percent(flake_ratio)}% "
+        log += f"* flake:{self._percent(flake_ratio)}% "
 
         # 5. Punish less based on how much SSC the user has.
         # Only applicable if the user has less than the starting SSC.
         # Function Requirements: f(STARTING_SSC) = 1, f(0) = 0
         if current_ssc < party.STARTING_SSC:
-            amnesty_ratio = (current_ssc**2) / (party.STARTING_SSC**2)
-            penalty *= amnesty_ratio
-            log += f"* amnesty-{self._percent(amnesty_ratio)}% "
+            tax_break_ratio = (current_ssc**2) / (party.STARTING_SSC**2)
+            penalty *= tax_break_ratio
+            log += f"* tax-break:{self._percent(tax_break_ratio)}% "
 
         # 6. Round up to the nearest integer.
         penalty = math.ceil(penalty)
 
-        log += f" = {penalty} SSC for joining a party."
+        log += f"= {penalty} SSC for flaking on a party."
+        print(log)
         return penalty
 
     async def credit(self, user_id: int, current_ssc: int, parties_joined: int):
@@ -113,38 +114,29 @@ class SailBank:
             - RATIONALE: Subsequent parties in a day should not be as rewarding. This
             rewards consistency instead of just joining a bunch of parties in a day.
         """
-        # The base reward for joining a party.
+        # 1. The base reward for joining a party.
         reward = self.BASE_REWARD
+        log = f"[user-{user_id}]: CREDIT base-{self.BASE_REWARD} SSC "
 
-        # Function to decrease the reward based on the number of parties joined within
-        # the lookback period. Always round up. Returns a ratio.
-        def diminishing_returns(parties_joined: int) -> float:
-            return 1 / ((2 * parties_joined) + 1)
+        # 2. Reward people with less SSC, the more games they play in a certain period.
+        # (first game = 1.0) / (any more after that = 0.x)
+        diminishing_ratio = 1 / ((2 * parties_joined) + 1)
+        reward = reward * diminishing_ratio
+        log += f"* dim:{self._percent(diminishing_ratio)}% "
 
-        # Taxes: makes it harder for users with more SSC to gain more. Returns a float
-        # between 0 and 1. Returns a ratio.
-        def taxes(current_ssc: int) -> float:
-            return 1 - math.log(current_ssc + 1) / 10
-
-        # Reduce the Base reward relative to how many parties the user has joined.
-        diminishing_ratio = diminishing_returns(parties_joined)
-        reward = math.ceil(reward * diminishing_ratio)
-
-        # Only apply taxes if the user has more than starting SSC currently.
-        tax_ratio = None
+        # 3. Reward people less based on how much SSC they have.
+        # Only applicable if the user has more than the starting SSC.
+        # Function Requirements: f(STARTING_SSC) = 1, f(infinity) = 0
         if current_ssc > party.STARTING_SSC:
-            tax_ratio = taxes(current_ssc)
-            reward = math.ceil(reward * tax_ratio)
+            tax_ratio = (party.STARTING_SSC**2) / (current_ssc**2)
+            reward *= tax_ratio
+            log += f"* tax:{self._percent(tax_ratio)}% "
 
-        log = (
-            f"[user-{user_id}]: base-{self.BASE_REWARD} SSC"
-            + f" * dim-{self._percent(diminishing_ratio)}%"
-        )
-        if tax_ratio:
-            log += f" * tax-{self._percent(tax_ratio)}%"
-        log += f" = {reward} SSC for joining a party."
+        # 4. Round up to the nearest integer.
+        reward = math.ceil(reward)
+
+        log += f"= {reward} SSC for joining a party."
         print(log)
-
         return reward
 
     async def process_party_reward(self, party: Party) -> dict[str, dict[str, int]]:
