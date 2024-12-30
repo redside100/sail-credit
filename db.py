@@ -105,7 +105,7 @@ async def get_all_users() -> List[Dict[str, Any]]:
 
 async def get_sail_credit_logs() -> List[Dict[str, Any]]:
     async with db.execute(
-        "SELECT * FROM sail_credit_log ORDER BY timestamp DESC"
+        "SELECT * FROM sail_credit_log ORDER BY timestamp ASC"
     ) as cursor:
         rows = await cursor.fetchall()
         return rows
