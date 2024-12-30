@@ -17,6 +17,9 @@ class SailBank:
     # How much sail credit a user receives for completing a party by default.
     BASE_REWARD = 20
 
+    # How much sail credit to deduct from a user for flaking on a party.
+    FLAKE_PENALTY = 100
+
     # How far back we check for previous parties, in seconds. Reward should be
     # decreased for each party joined within this time frame.
     LOOKBACK_WINDOW = 60 * 60 * 24  # 24 hours
@@ -51,7 +54,7 @@ class SailBank:
             - RATIONALE: If a user consistently flakes over a period of time, they
             should lose more SSC. Checks last N days instead of parties to incentivize
             consistent behavior, and can't be erased by joining 20 parties in a day.
-        - How long the party was established for before the user flaked.
+        - How long the party was established for before the user flaked (in seconds).
             - RATIONALE: Discourages users from flaking on parties that have been
             established for a long time, when other people have invested more time into
             waiting.
@@ -59,8 +62,44 @@ class SailBank:
             - RATIONALE: The larger the party, the more people are affected by the
             flake.
         """
-        print("-3")
-        return -3
+        # 1. The base SSC to deduct for flaking.
+        penalty = self.FLAKE_PENALTY
+        log = f"[user-{user_id}]: DEBIT base-{self.FLAKE_PENALTY} SSC "
+
+        # 2. Punish based on how many people were affected.x
+        # (less than group of 5 = 0.x) / (more than group of 5 = 1.x)
+        size_ratio = party_size / 5
+        penalty *= size_ratio
+        log += f"* size-{self._percent(size_ratio)}% "
+
+        # 3. Punish based on how long everybody waited.
+        # Only applicable if greater than 30 minutes.
+        # (less than 30m  = 0.x) / (more than 30m = 1.x)
+        if party_age > 30 * 60:
+            age_ratio = party_age / (30 * 60)
+            penalty *= age_ratio
+            log += f"* age-{self._percent(age_ratio)}% "
+
+        # 4. Punished based on how many times the user has flaked in the past N days.
+        # The more days that the user flaked on, increases the penalty by 50%. Flakes
+        # on the same day are not affected.
+        flake_ratio = 0.5 * flake_count + 1
+        penalty *= flake_ratio
+        log += f"* flake-{self._percent(flake_ratio)}% "
+
+        # 5. Punish less based on how much SSC the user has.
+        # Only applicable if the user has less than the starting SSC.
+        # Function Requirements: f(STARTING_SSC) = 1, f(0) = 0
+        if current_ssc < party.STARTING_SSC:
+            amnesty_ratio = (current_ssc**2) / (party.STARTING_SSC**2)
+            penalty *= amnesty_ratio
+            log += f"* amnesty-{self._percent(amnesty_ratio)}% "
+
+        # 6. Round up to the nearest integer.
+        penalty = math.ceil(penalty)
+
+        log += f" = {penalty} SSC for joining a party."
+        return penalty
 
     async def credit(self, user_id: int, current_ssc: int, parties_joined: int):
         """
@@ -141,25 +180,38 @@ class SailBank:
         SSC was deducted from the user.
         """
         user = await db.get_user(user_id)
+
+        def round_nearest_day(x, base=(24 * 60 * 60)) -> int:
+            return base * round(x / base)
+
+        # Calculate how many times in the FLAKE_WINDOW has the user flaked.
+        days_flaked = set()
         history = await db.get_user_sail_credit_log(user_id, self.FLAKE_WINDOW)
+        for entry in history:
+            days_flaked.add(round_nearest_day(entry["timestamp"]))
+
+        # Calculate lifetime of the party.
         party_age = party.creation_time - int(time.time())
-        reward = await self.debit(
+
+        # Calculate the penalty for flaking.
+        penalty = await self.debit(
             user_id,
             user["sail_credit"],
-            len(history),
+            len(days_flaked),
             party_age,
             party.size,
         )
+
         await db.change_and_log_sail_credit(
             user_id,
             party.size,
             party_age,
             user["sail_credit"],
-            user["sail_credit"] + reward,
+            user["sail_credit"] + penalty,
         )
         return {
             "old": user["sail_credit"],
-            "new": user["sail_credit"] + reward,
+            "new": user["sail_credit"] + penalty,
         }
 
     def _percent(self, x: float) -> float:

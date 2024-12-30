@@ -28,7 +28,8 @@ async def cleanup():
 
 async def create_user(discord_id: int) -> Dict[str, Any]:
     await db.execute(
-        "INSERT INTO users (discord_id, sail_credit) VALUES (?, 600)", (discord_id,)
+        f"INSERT INTO users (discord_id, sail_credit) VALUES (?, {party.STARTING_SSC})",
+        (discord_id,),
     )
     await db.commit()
     return {"discord_id": discord_id, "sail_credit": party.STARTING_SSC}
