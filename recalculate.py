@@ -41,9 +41,9 @@ async def calculate():
             members=[PartyMember(user_id=log["discord_id"], name="")],
         )
         if log["new_sail_credit"] - log["prev_sail_credit"] < 0:
-            bank.process_flaked_user(party, log["discord_id"])
+            await bank.process_flaked_user(party, log["discord_id"])
         else:
-            bank.process_party_reward(party)
+            await bank.process_party_reward(party)
     print("Done!")
 
 
