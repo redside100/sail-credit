@@ -39,9 +39,9 @@ class Party:
     role: discord.Role
     name: str
     owner_id: Optional[int]
-    created_at: Optional[int]
-    finished_at: Optional[int]
     start_time: Optional[int]
+    created_at: int
+    finished_at: Optional[int] = None
     interaction: Optional[discord.Interaction] = None
     jump_url: Optional[str] = None
     size: int = 5

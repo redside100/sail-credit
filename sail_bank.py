@@ -158,7 +158,8 @@ class SailBank:
             await db.change_and_log_sail_credit(
                 member.user_id,
                 party.size,
-                party.finished_at - party.created_at,
+                party.created_at,
+                party.finished_at,
                 user["sail_credit"],
                 user["sail_credit"] + reward,
             )
