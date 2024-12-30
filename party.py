@@ -55,8 +55,9 @@ class Party:
         start_string = f"\n\nStarts: <t:{self.start_time}:R>" if self.start_time else ""
         waitlist_mentions = [f"<@{m.user_id}>" for m in self.waitlist]
         waitlist_string = f"Waitlist: {" ".join(waitlist_mentions)}"
+        remaining_spots = self.size - len(self.members)
         content = (
-            f"**{self.name}**\n\n`{self.size - len(self.members)}` spots left.{start_string}\n\n"
+            f"**{self.name}**\n\n`{remaining_spots}` spot{'s' if remaining_spots != 1 else ''} left.{start_string}\n\n"
             + f"Current Party:\n"
         )
         for member in self.members:
@@ -180,13 +181,9 @@ class PartyService:
         if not interaction:
             return
 
-        # Copy pasta -> transformed logic from the view.
-        # Slightly stricter requirements here, the party needs to be full to auto start.
+        # Slightly stricter requirements here, the party needs to be full and more than 1 person to auto start.
         # If not, the party can still be started manually.
-        if len(party.members) < party.size:
-            await interaction.followup.send(
-                f"<@{party.owner_id}> This party wasn't started automatically since it isn't full. You can still start it manually by clicking **Start** in the original message!"
-            )
+        async def unschedule_party():
             # Setting start_time to None will cause the party embed to not include a starting timestamp
             party.start_time = None
 
@@ -195,7 +192,28 @@ class PartyService:
                 embed=create_embed(party.generate_embed()),
                 view=PartyView(party, self, scheduled=False),
             )
+
+        # We can't start parties with less than 2 members.
+        if len(party.members) < 2:
+            await interaction.followup.send(
+                f"<@{party.owner_id}> This party can't be started automatically since it has less than 2 people. You can make a new party to try again."
+            )
+            self.remove_party(party.uuid)
+            party.start_time = None
+            await interaction.edit_original_response(
+                embed=create_embed(party.generate_embed()), view=None
+            )
             return
+
+        # We can't start parties that aren't full.
+        if len(party.members) < party.size:
+            await interaction.followup.send(
+                f"<@{party.owner_id}> This party wasn't started automatically since it isn't full. You can still start it manually by clicking **Start** in the original message!"
+            )
+            await unschedule_party()
+            return
+
+        # Copy pasta -> transformed logic from the view.
 
         # Notify all party members.
         party_mentions = [f"<@{member.user_id}>" for member in party.members]

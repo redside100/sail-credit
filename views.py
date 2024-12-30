@@ -105,24 +105,19 @@ class PartyView(discord.ui.View):
             )
             return
 
-        await interaction.response.defer()
+        # If the party has less than two people, stop
+        if len(self.party.members) < 2:
+            await interaction.response.send_message(
+                "Parties need at least 2 people to start.", ephemeral=True
+            )
+            return
 
-        # TODO: Uncomment.
-        # if len(self.party.members) < 2:
-        #     await interaction.edit_original_response(
-        #         embed=create_embed(
-        #             "This party was not started since there are not enough members."
-        #         ),
-        #         content=None,
-        #     )
-        #     self.party_service.remove_party(self.party.uuid)
-        #     await disable_buttons_and_stop_view(self, interaction)
-        #     return
+        await interaction.response.defer()
 
         # Notify all party members.
         party_mentions = [f"<@{member.user_id}>" for member in self.party.members]
 
-        report_msg = "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
+        report_msg = "For a short while, any party member can click the **Report** button to report a flaker."
 
         next_view = PostPartyView(self.party, None)
         next_view.message = await interaction.followup.send(
@@ -245,8 +240,8 @@ class PostPartyView(discord.ui.View):
     def __init__(self, party: Party, message: discord.Message):
         self.party = party
         self.message = message
-        super().__init__(timeout=2)  # TESTING PURPOSES.
-        # super().__init__(timeout=300)  # 5m  # TODO: Uncomment.
+        self.start_time = int(time.time())
+        super().__init__(timeout=300)  # 5 minute timeout
 
     async def on_timeout(self):
         """
@@ -277,6 +272,11 @@ class PostPartyView(discord.ui.View):
         return content
 
     async def interaction_check(self, interaction: discord.Interaction):
+        # To avoid keeping this view alive forever (as some people may abuse), stop interactions after 5 minutes since creation to let it timeout.
+        now = int(time.time())
+        if now > self.start_time + 300:
+            return False
+
         # Only allow party members to interact with this view.
         if interaction.user.id not in [member.user_id for member in self.party.members]:
             return False
@@ -284,7 +284,6 @@ class PostPartyView(discord.ui.View):
 
     @discord.ui.button(label="Report", style=discord.ButtonStyle.red)
     async def report(self, interaction: discord.Interaction, _):
-
         # Check party status
         if self.party.status == PartyStatus.VOTING:
             await interaction.response.send_message(
@@ -303,7 +302,6 @@ class PostPartyView(discord.ui.View):
 class ReportSelectView(discord.ui.View):
     def __init__(self, party: Party, reporter_id: int):
         self.party = party
-        self.party.status = PartyStatus.VOTING
         self.reporter_id = reporter_id
         super().__init__(timeout=60)  # 1m
 
@@ -344,6 +342,7 @@ class ReportSelectView(discord.ui.View):
 class ReportView(discord.ui.View):
     def __init__(self, party: Party, reported_id: int):
         self.party = party
+        self.party.status = PartyStatus.VOTING
         self.reported_id = reported_id
         self.convict_votes = []
         self.acquit_votes = []
