@@ -39,15 +39,15 @@ class Party:
     role: discord.Role
     name: str
     owner_id: Optional[int]
-    start_time: Optional[int]
     created_at: int
     finished_at: Optional[int] = None
+    start_time: Optional[int] = None
     interaction: Optional[discord.Interaction] = None
     jump_url: Optional[str] = None
     size: int = 5
     status: PartyStatus = PartyStatus.ASSEMBLING
     description: str = ""
-    members: list[PartyMember] = field(default_factory=[])
+    members: list[PartyMember] = field(default_factory=lambda: [])
 
     def generate_embed(self) -> str:
         start_string = f"\n\nStarts: <t:{self.start_time}:R>" if self.start_time else ""
