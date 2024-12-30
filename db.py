@@ -107,3 +107,8 @@ async def get_sail_credit_logs() -> List[Dict[str, Any]]:
     ) as cursor:
         rows = await cursor.fetchall()
         return rows
+
+
+async def clear_sail_credit_logs() -> None:
+    await db.execute("DELETE FROM sail_credit_log")
+    await db.commit()
