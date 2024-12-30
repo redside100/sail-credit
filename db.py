@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 import aiosqlite
 
 import party
@@ -75,12 +75,13 @@ async def change_and_log_sail_credit(
     party_finished_at: int,
     old_ssc: int,
     new_ssc: int,
+    source: Literal["PARTY", "ADMIN"] = "PARTY",
     timestamp: int = None,
 ) -> None:
     if not timestamp:
         timestamp = int(time.time())
     await db.execute(
-        "INSERT INTO sail_credit_log VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sail_credit_log VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             discord_id,
             party_size,
@@ -88,6 +89,7 @@ async def change_and_log_sail_credit(
             party_finished_at,
             old_ssc,
             new_ssc,
+            source,
             timestamp,
         ),
     )

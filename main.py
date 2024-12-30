@@ -1,5 +1,4 @@
 import asyncio
-from dataclasses import asdict
 import time
 from typing import Literal, Optional
 from discord import app_commands
@@ -9,7 +8,7 @@ import db
 from party import Party, PartyService
 
 from util import create_ssc_graph_url, divide_chunks, user_command, create_embed
-from views import LeaderboardView, PartyView, MessageBook
+from views import LeaderboardView, PartyView
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -96,11 +95,30 @@ async def parties(interaction: discord.Interaction, leader: Optional[bool] = Fal
 
 
 @bot.tree.command(name="ssc", description="Check your Sail Social Credit (SSC) score!")
+@app_commands.describe(user="The discord user to check SSC for.")
 @user_command()
-async def ssc(interaction: discord.Interaction):
+async def ssc(interaction: discord.Interaction, user: Optional[discord.User] = None):
+    # If no user supplied, get SSC for yourself.
+    if not user:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message=f"<@{interaction.user.id}>'s Sail Social Credit: **{interaction.data['user_data']['sail_credit']}**"
+            ),
+        )
+        return
+
+    # If we do have a user, get that user's SSC (if exists)
+    user_info = await db.get_user(user.id)
+    if not user_info:
+        await interaction.response.send_message(
+            embed=create_embed(message="This user hasn't used the bot before!"),
+            ephemeral=True,
+        )
+        return
+
     await interaction.response.send_message(
         embed=create_embed(
-            message=f"<@{interaction.user.id}>'s Sail Social Credit: **{interaction.data['user_data']['sail_credit']}**"
+            message=f"<@{user.id}>'s Sail Social Credit: **{user_info['sail_credit']}**"
         ),
     )
 
@@ -195,6 +213,57 @@ async def search(interaction: discord.Interaction, role: discord.Role):
             message=party_message if party_message else "No Parties!",
         )
     )
+
+
+@bot.tree.command(
+    name="adjust-ssc",
+    description="Manually adjust a user's SSC. Requires admin privileges!",
+)
+@app_commands.describe(
+    user="The discord user to adjust SSC for.",
+    delta="The amount of SSC to add or deduct.",
+)
+@user_command()
+async def adjust_ssc(interaction: discord.Interaction, user: discord.User, delta: int):
+
+    # Check if this command is used in a server.
+    if not isinstance(interaction.user, discord.Member):
+        await interaction.response.send_message(
+            embed=create_embed(message="This can only be used in a server."),
+            ephemeral=True,
+        )
+        return
+
+    # Admin check.
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            embed=create_embed(message="You need admin priviliges to use this."),
+            ephemeral=True,
+        )
+        return
+
+    # Check if the user exists.
+    user_info = await db.get_user(user.id)
+    if not user_info:
+        await interaction.response.send_message(
+            embed=create_embed(message="This user hasn't used the bot before!"),
+            ephemeral=True,
+        )
+        return
+
+    new_ssc = max(0, user_info["sail_credit"] + delta)
+
+    # Change and log SSC, with ADMIN as the source.
+    await db.change_and_log_sail_credit(
+        user.id, -1, -1, -1, user_info["sail_credit"], new_ssc, "ADMIN"
+    )
+
+    await interaction.response.send_message(
+        embed=create_embed(
+            message=f"Adjusted <@{user.id}>'s SSC by **{delta}**.\nNew SSC: **{new_ssc}**"
+        ),
+    )
+    return
 
 
 @bot.event

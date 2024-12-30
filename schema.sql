@@ -10,5 +10,6 @@ CREATE TABLE sail_credit_log (
     party_finished_at INTEGER,
     prev_sail_credit INTEGER,
     new_sail_credit INTEGER,
+    source TEXT CHECK(source IN ('PARTY', 'ADMIN')),
     'timestamp' INTEGER
 );

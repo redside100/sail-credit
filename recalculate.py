@@ -30,6 +30,26 @@ async def calculate():
     print("Recalculating SSC for all users...")
     print(f"Total logs: {len(existing_logs)}")
     for log in existing_logs:
+
+        # If this is an admin change, don't recalculate using the algorithm.
+        # Just find the delta and apply.
+        if log["source"] == "ADMIN":
+            user = await db.get_user(log["discord_id"])
+            old_ssc = user["sail_credit"]
+            delta = log["new_sail_credit"] - log["prev_sail_credit"]
+            new_ssc = max(0, old_ssc + delta)
+            await db.change_and_log_sail_credit(
+                discord_id=log["discord_id"],
+                party_size=log["party_size"],
+                party_created_at=log["party_created_at"],
+                party_finished_at=log["party_finished_at"],
+                new_ssc=new_ssc,
+                old_ssc=old_ssc,
+                source=log["source"],
+                timestamp=log["timestamp"],
+            )
+            continue
+
         party = Party(
             uuid=uuid.uuid4(),
             role=0,
@@ -53,3 +73,4 @@ async def calculate():
 if __name__ == "__main__":
     asyncio.run(db.init())
     asyncio.run(calculate())
+    asyncio.run(db.cleanup())
