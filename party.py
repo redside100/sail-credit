@@ -1,6 +1,7 @@
+from collections import deque
 from dataclasses import dataclass, field
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from enum import Enum
 from uuid import UUID, uuid4
 from discord import User, Member
@@ -48,22 +49,72 @@ class Party:
     status: PartyStatus = PartyStatus.ASSEMBLING
     description: str = ""
     members: list[PartyMember] = field(default_factory=lambda: [])
+    waitlist: deque[PartyMember] = field(default_factory=lambda: deque())
 
     def generate_embed(self) -> str:
         start_string = f"\n\nStarts: <t:{self.start_time}:R>" if self.start_time else ""
+        waitlist_mentions = [f"<@{m.user_id}>" for m in self.waitlist]
+        waitlist_string = f"Waitlist: {" ".join(waitlist_mentions)}"
         content = (
-            f"`{self.size - len(self.members)}` spots left.{start_string}\n\n"
+            f"**{self.name}**\n\n`{self.size - len(self.members)}` spots left.{start_string}\n\n"
             + f"Current Party:\n"
         )
         for member in self.members:
-            content += f"- <@{member.user_id}>\n"
+            content += f"- {'👑 ' if member.user_id == self.owner_id else ''}<@{member.user_id}>\n"
+
+        if self.waitlist:
+            content += f"\n{waitlist_string}\n"
 
         return content
 
-    def leave_party(self, user_id: int):
+    """
+    Adds a party member.
+    Automatically adds the member to the waitlist if the party is full.
+    Returns true if waitlisted, false if not.
+    """
+
+    def add_member(self, user_id: int, user_name: str) -> bool:
+        party_member = PartyMember(user_id=user_id, name=user_name)
+
+        # There is space, add to member list.
+        if len(self.members) < self.size:
+            self.members.append(party_member)
+            return False
+
+        # No space, add to waitlist.
+        self.waitlist.append(party_member)
+        return True
+
+    """
+    Removes a party member.
+    Automatically adds the next waiting user as a member.
+    Returns a the member that was auto added from waitlist, if any.
+    """
+
+    def remove_member(self, user_id: int) -> Optional[PartyMember]:
+
+        # User is in the waitlist. Remove them from the waitlist.
+        waitlist_ids = [member.user_id for member in self.waitlist]
+        if user_id in waitlist_ids:
+            self.waitlist = [
+                member for member in self.waitlist if member.user_id != user_id
+            ]
+            return None
+
+        # User is a member. Remove them from the member list.
         self.members = [member for member in self.members if member.user_id != user_id]
+
+        new_member = None
+        # If there is a waitlist, de-queue the first one and add them to the party.
+        if self.waitlist:
+            new_member = self.waitlist.popleft()
+            self.members.append(new_member)
+
+        # If the user that left was the owner, assign a new owner if possible.
         if user_id == self.owner_id:
             self.owner_id = self.members[0].user_id if self.members else None
+
+        return new_member
 
 
 class PartyService:

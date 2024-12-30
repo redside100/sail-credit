@@ -142,25 +142,21 @@ class PartyView(discord.ui.View):
     @user_interaction_callback()
     async def join(self, interaction: discord.Interaction):
 
-        # Check if the user is already in the party.
+        # Check if the user is already in the party or waitlist.
         party_member_ids = [member.user_id for member in self.party.members]
-        if interaction.user.id in party_member_ids:
+        waitlisted_ids = [member.user_id for member in self.party.waitlist]
+        if (
+            interaction.user.id in party_member_ids
+            or interaction.user.id in waitlisted_ids
+        ):
             await interaction.response.send_message(
-                "You are already in the party.", ephemeral=True
+                "You are already in the party or waitlist.", ephemeral=True
             )
             return
 
-        # Check if the party is full.
-        # TODO: In the future, people can still join parties which are full but are
-        # waitlisted.
-        if len(self.party.members) >= self.party.size:
-            await interaction.response.send_message(
-                "The party is full.", ephemeral=True
-            )
-            return
-
-        self.party.members.append(
-            PartyMember(user_id=interaction.user.id, name=interaction.user.display_name)
+        # Add the user to the party
+        waitlisted = self.party.add_member(
+            interaction.user.id, interaction.user.display_name
         )
 
         await interaction.response.defer()
@@ -168,20 +164,32 @@ class PartyView(discord.ui.View):
             embed=create_embed(self.party.generate_embed())
         )
 
+        if waitlisted:
+            await interaction.followup.send(
+                "This party is full, but you've been added to the waitlist.",
+                ephemeral=True,
+            )
+
     # Since join and leave can be the first action a user takes with the bot, we need to add a special decorator here
     @user_interaction_callback()
     async def leave(self, interaction: discord.Interaction):
 
-        # Check if the user is in the party.
+        # Check if the user is in the party or waitlist.
         party_member_ids = [member.user_id for member in self.party.members]
-        if interaction.user.id not in party_member_ids:
+        waitlisted_ids = [member.user_id for member in self.party.waitlist]
+
+        if (
+            interaction.user.id not in party_member_ids
+            and not interaction.user.id in waitlisted_ids
+        ):
             await interaction.response.send_message(
-                "You are not in the party.", ephemeral=True
+                "You are not in the party or waitlist.", ephemeral=True
             )
             return
 
         old_owner = self.party.owner_id
-        self.party.leave_party(interaction.user.id)
+
+        member_from_waitlist = self.party.remove_member(interaction.user.id)
 
         await interaction.response.defer()
 
@@ -191,18 +199,26 @@ class PartyView(discord.ui.View):
                 embed=create_embed("This party was abandoned since everyone left."),
                 content=None,
             )
+            # Remove from party service to deschedule the job.
+            self.party_service.remove_party(self.party.uuid)
             await disable_buttons_and_stop_view(self, interaction)
             return
 
         await interaction.edit_original_response(
             embed=create_embed(self.party.generate_embed()),
-            # If the party has a new owner, announce it.
-            content=(
-                f"<@{self.party.owner_id}> is the new party leader."
-                if self.party.owner_id != old_owner
-                else None
-            ),
         )
+
+        # If the party has a new owner, announce it.
+        if self.party.owner_id != old_owner:
+            await interaction.followup.send(
+                content=(f"<@{self.party.owner_id}> is the new party leader."),
+            )
+
+        # If someone filled from waitlist, notify them.
+        if member_from_waitlist:
+            await interaction.followup.send(
+                content=f"<@{member_from_waitlist.user_id}> Someone left the party, and because you were waitlisted, you filled their spot!",
+            )
 
     async def cancel(self, interaction: discord.Interaction):
 

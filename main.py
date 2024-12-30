@@ -22,18 +22,6 @@ party_service: Optional[PartyService] = None
 
 
 @bot.tree.command(
-    name="ping",
-    description="Pong!",
-)
-@app_commands.describe(
-    foo="A test description for foo", bar="A test description for bar"
-)
-@user_command()
-async def ping(interaction: discord.Interaction, foo: str, bar: int):
-    await interaction.response.send_message(f"Pong! {foo=} {bar=}", ephemeral=True)
-
-
-@bot.tree.command(
     name="party-up",
     description="Creates a party, allowing others to let you know they want to join!",
 )
@@ -184,6 +172,29 @@ async def ssc_graph(
         interaction.user.id, interaction.user.display_name, period
     )
     await interaction.response.send_message(content=graph_url)
+
+
+@bot.tree.command(name="search", description="Searches for active parties for a role!")
+@app_commands.describe(role="The discord role the party should be for.")
+@user_command()
+async def search(interaction: discord.Interaction, role: discord.Role):
+    party_list = []
+    for party in party_service.parties.values():
+        if party.role.id == role.id:
+            party_list.append(party)
+
+    party_message = "\n".join(
+        [
+            f"{'👑 ' if p.owner_id == interaction.user.id else ''}{p.name} {p.jump_url}"
+            for p in party_list
+        ]
+    )
+    await interaction.response.send_message(
+        embed=create_embed(
+            title=f"Party search for @{role.name}",
+            message=party_message if party_message else "No Parties!",
+        )
+    )
 
 
 @bot.event
