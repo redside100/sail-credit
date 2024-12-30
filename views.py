@@ -8,7 +8,12 @@ import discord
 import db
 from party import Party, PartyMember, PartyMemberStatus, PartyService, PartyStatus
 from scb import SailCreditBureau
-from util import create_embed, disable_buttons_and_stop_view
+from util import (
+    create_embed,
+    disable_buttons_and_stop_view,
+    user_command,
+    user_interaction_callback,
+)
 
 scb = SailCreditBureau()
 """
@@ -133,6 +138,8 @@ class PartyView(discord.ui.View):
         self.party_service.remove_party(self.party.uuid)
         await disable_buttons_and_stop_view(self, interaction)
 
+    # Since join and leave can be the first action a user takes with the bot, we need to add a special decorator here
+    @user_interaction_callback()
     async def join(self, interaction: discord.Interaction):
 
         # Check if the user is already in the party.
@@ -161,6 +168,8 @@ class PartyView(discord.ui.View):
             embed=create_embed(self.party.generate_embed())
         )
 
+    # Since join and leave can be the first action a user takes with the bot, we need to add a special decorator here
+    @user_interaction_callback()
     async def leave(self, interaction: discord.Interaction):
 
         # Check if the user is in the party.

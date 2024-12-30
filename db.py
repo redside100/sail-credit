@@ -112,3 +112,11 @@ async def get_sail_credit_logs() -> List[Dict[str, Any]]:
 async def clear_sail_credit_logs() -> None:
     await db.execute("DELETE FROM sail_credit_log")
     await db.commit()
+
+
+async def get_ssc_leaderboard() -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT discord_id, sail_credit FROM users ORDER BY sail_credit DESC"
+    ) as cursor:
+        rows = await cursor.fetchall()
+        return rows

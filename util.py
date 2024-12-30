@@ -27,6 +27,30 @@ def user_command():
     return wrapper
 
 
+def user_interaction_callback():
+    """
+    A util decorator to automatically create and inject db info for a user interaction callback.
+    This needs to be right above the function definition, and the function's second argument must accept a discord interaction!
+    """
+
+    def wrapper(func):
+        @functools.wraps(func)
+        # first argument should be a self instance
+        async def wrapped(_, interaction: discord.Interaction, *args, **kwargs):
+            user_data = await db.get_user(interaction.user.id)
+
+            if not user_data:
+                user_data = await db.create_user(interaction.user.id)
+
+            interaction.data["user_data"] = user_data
+
+            return await func(interaction, *args, **kwargs)
+
+        return wrapped
+
+    return wrapper
+
+
 def create_embed(message: str, title: Optional[str] = None):
     embed = discord.Embed(color=0xFFAE00)
     embed.description = message
@@ -49,3 +73,8 @@ async def disable_buttons_and_stop_view(
         await obj.edit_original_response(view=view)
     else:
         raise Exception("Invalid object type passed to disable_buttons_and_stop_view")
+
+
+def divide_chunks(l, n):
+    for i in range(0, len(l), n):
+        yield l[i : i + n]

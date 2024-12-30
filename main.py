@@ -8,8 +8,8 @@ from discord.ext import commands
 import db
 from party import Party, PartyService
 
-from util import user_command, create_embed
-from views import PartyView
+from util import divide_chunks, user_command, create_embed
+from views import PartyView, MessageBook
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -105,6 +105,71 @@ async def parties(interaction: discord.Interaction, leader: Optional[bool] = Fal
             message=party_message if party_message else "No Parties!",
         )
     )
+
+
+@bot.tree.command(name="ssc", description="Check your Sail Social Credit (SSC) score!")
+@user_command()
+async def ssc(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        embed=create_embed(
+            message=f"<@{interaction.user.id}>'s Sail Social Credit: **{interaction.data['user_data']['sail_credit']}**"
+        ),
+    )
+
+
+@bot.tree.context_menu(name="Get SSC")
+@user_command()
+async def get_ssc(interaction: discord.Interaction, user: discord.User):
+    user_info = await db.get_user(user.id)
+    if not user_info:
+        await interaction.response.send_message(
+            embed=create_embed(message="This user hasn't used the bot before!"),
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.send_message(
+        embed=create_embed(
+            message=f"<@{user.id}>'s Sail Social Credit: **{user_info['sail_credit']}**"
+        ),
+    )
+
+
+@bot.tree.command(name="leaderboard", description="Check the SSC leaderboard!")
+@user_command()
+async def leaderboard(interaction: discord.Interaction):
+    pages = []
+    users = await db.get_ssc_leaderboard()
+    chunks = divide_chunks(users, 10)
+
+    for i, chunk in enumerate(chunks):
+        page_contents = []
+        for j, user in enumerate(chunk):
+            rank = i * 10 + j + 1
+            page_contents.append(
+                f"**#{rank}** <@{user['discord_id']}> ({user['sail_credit']} SSC)"
+            )
+        pages.append(
+            create_embed(title="SSC Leaderboard", message="\n".join(page_contents))
+        )
+
+    if not pages:
+        await interaction.response.send_message(
+            embed=create_embed(title="SSC Leaderboard", message="Nobody!"),
+        )
+        return
+
+    await interaction.response.send_message(
+        embed=pages[0], view=MessageBook(user_id=interaction.user.id, pages=pages)
+    )
+
+
+@bot.tree.command(
+    name="ssc-graph", description="Check a graph of your SSC over a time period!"
+)
+@user_command()
+async def ssc_graph(interaction: discord.Interaction):
+    pass
 
 
 @bot.event
