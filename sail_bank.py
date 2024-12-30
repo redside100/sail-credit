@@ -18,7 +18,7 @@ class SailBank:
     BASE_REWARD = 20
 
     # How much sail credit to deduct from a user for flaking on a party.
-    BASE_PENALTY = -300
+    BASE_PENALTY = -200
 
     # How far back we check for previous parties, in seconds. Reward should be
     # decreased for each party joined within this time frame.
@@ -180,7 +180,8 @@ class SailBank:
         days_flaked = set()
         history = await db.get_user_sail_credit_log(user_id, self.FLAKE_WINDOW)
         for entry in history:
-            days_flaked.add(round_nearest_day(entry["timestamp"]))
+            if entry["new_sail_credit"] - entry["prev_sail_credit"] < 0:
+                days_flaked.add(round_nearest_day(entry["timestamp"]))
 
         # Calculate lifetime of the party.
         party_age = party.creation_time - int(time.time())
