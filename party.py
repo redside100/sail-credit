@@ -88,7 +88,7 @@ class Party:
     """
     Removes a party member.
     Automatically adds the next waiting user as a member.
-    Returns a the member that was auto added from waitlist, if any.
+    Returns the member that was auto added from waitlist, if any.
     """
 
     def remove_member(self, user_id: int) -> Optional[PartyMember]:
