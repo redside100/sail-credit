@@ -14,16 +14,21 @@ async def calculate():
     recalculates the SSC for all users.
     """
     # Save all the logs into memory.
+    print("Fetching logs...")
     existing_logs = await db.get_sail_credit_logs()
 
     # Reset all user to their starting SSC.
+    print("Resetting all users to default SSC...")
     for user in await db.get_all_users():
         await db.set_user(user["discord_id"], STARTING_SSC)
 
     # Wipe the logs table.
+    print("Wiping the logs table...")
     await db.clear_sail_credit_logs()
 
     # Recalculate the SSC for all users.
+    print("Recalculating SSC for all users...")
+    print(f"Total logs: {len(existing_logs)}")
     for log in existing_logs:
         party = Party(
             uuid=uuid.uuid4(),
@@ -39,6 +44,7 @@ async def calculate():
             bank.process_flaked_user(party, log["discord_id"])
         else:
             bank.process_party_reward(party)
+    print("Done!")
 
 
 if __name__ == "__main__":
