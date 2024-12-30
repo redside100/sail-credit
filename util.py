@@ -36,7 +36,7 @@ def user_interaction_callback():
     def wrapper(func):
         @functools.wraps(func)
         # first argument should be a self instance
-        async def wrapped(_, interaction: discord.Interaction, *args, **kwargs):
+        async def wrapped(self, interaction: discord.Interaction, *args, **kwargs):
             user_data = await db.get_user(interaction.user.id)
 
             if not user_data:
@@ -44,7 +44,7 @@ def user_interaction_callback():
 
             interaction.data["user_data"] = user_data
 
-            return await func(interaction, *args, **kwargs)
+            return await func(self, interaction, *args, **kwargs)
 
         return wrapped
 
