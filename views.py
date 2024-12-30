@@ -7,10 +7,10 @@ import discord
 
 import db
 from party import Party, PartyMember, PartyMemberStatus, PartyService, PartyStatus
-from sail_bank import SailBank
+from scb import SailCreditBureau
 from util import create_embed, disable_buttons_and_stop_view
 
-bank = SailBank()
+scb = SailCreditBureau()
 """
 View Workflow for Parties
 
@@ -234,7 +234,7 @@ class PostPartyView(discord.ui.View):
         ):
             self.party.status = PartyStatus.SUCCESS
             self.party.finished_at = int(time.time())
-            reward_data = await bank.process_party_reward(self.party)
+            reward_data = await scb.process_party_reward(self.party)
             await disable_buttons_and_stop_view(self, self.message)
             await self.message.edit(
                 embed=create_embed(self.generate_embed(reward_data)),
@@ -379,7 +379,7 @@ class ReportView(discord.ui.View):
             # No gains to be had.
 
         if len(self.convict_votes) >= self.votes_needed:
-            fine = await bank.process_flaked_user(self.party, self.reported_id)
+            fine = await scb.process_flaked_user(self.party, self.reported_id)
             content = f"**CONVICTED.** 🔨\n\n"
             content += (
                 f"<@{self.reported_id}> has been fined {fine['new'] - fine['old']} SSC "

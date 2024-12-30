@@ -1,11 +1,11 @@
 import uuid
 import db
 import asyncio
-from sail_bank import SailBank
+from scb import SailCreditBureau
 from party import Party, PartyMember, STARTING_SSC
 
 
-bank = SailBank()
+scb = SailCreditBureau()
 
 
 async def calculate():
@@ -41,9 +41,9 @@ async def calculate():
             members=[PartyMember(user_id=log["discord_id"], name="")],
         )
         if log["new_sail_credit"] - log["prev_sail_credit"] < 0:
-            await bank.process_flaked_user(party, log["discord_id"])
+            await scb.process_flaked_user(party, log["discord_id"])
         else:
-            await bank.process_party_reward(party)
+            await scb.process_party_reward(party)
     print("Done!")
 
 

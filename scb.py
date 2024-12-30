@@ -5,13 +5,13 @@ import db
 import party
 
 
-class SailBank:
+class SailCreditBureau:
     """
     Welcome all.
 
-    In calm currents flow,
-    Sail Bank charts wealth's steady course—
-    Dreams in safe harbors.
+    In Sail Bureau's care,
+    Scores like stars, shining bright paths—
+    Future steps secure.
     """
 
     # How much sail credit a user receives for completing a party by default.
