@@ -243,7 +243,12 @@ class PostPartyView(discord.ui.View):
         ):
             self.party.status = PartyStatus.SUCCESS
             self.party.finished_at = int(time.time())
-            reward_data = await scb.process_party_reward(self.party)
+            reward_data = {}
+            for member in self.party.members:
+                reward_data[member.user_id] = await scb.process_party_member(
+                    self.party, member.user_id
+                )
+
             await disable_buttons_and_stop_view(self, self.message)
             await self.message.edit(
                 embed=create_embed(self.generate_embed(reward_data)),
@@ -252,7 +257,7 @@ class PostPartyView(discord.ui.View):
     def generate_embed(self, reward_data: dict[str, int]) -> str:
         content = "The party was a success! 🎉\n\n"
         for user_id, reward in reward_data.items():
-            content += f"- <@{user_id}> received {reward['new'] - reward['old']} SSC ({reward['old']} SSC -> {reward['new']} SSC).\n"
+            content += f"- <@{user_id}> received {reward[2]} SSC ({reward[0]} SSC -> {reward[1]} SSC).\n"
         return content
 
     async def interaction_check(self, interaction: discord.Interaction):
@@ -390,10 +395,8 @@ class ReportView(discord.ui.View):
         if len(self.convict_votes) >= self.votes_needed:
             fine = await scb.process_flaked_user(self.party, self.reported_id)
             content = f"**CONVICTED.** 🔨\n\n"
-            content += (
-                f"<@{self.reported_id}> has been fined {fine['new'] - fine['old']} SSC "
-            )
-            content += f"({fine['old']} SSC -> {fine['new']} SSC) for flaking."
+            content += f"<@{self.reported_id}> has been fined {fine[2]} SSC "
+            content += f"({fine[0]} SSC -> {fine[1]} SSC) for flaking."
             content += f" Thank you for contributing to a better community."
             await interaction.edit_original_response(content=content)
 

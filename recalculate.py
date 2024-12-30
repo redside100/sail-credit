@@ -38,12 +38,15 @@ async def calculate():
             created_at=log["party_created_at"],
             finished_at=log["party_finished_at"],
             size=log["party_size"],
-            members=[PartyMember(user_id=log["discord_id"], name="")],
         )
         if log["new_sail_credit"] - log["prev_sail_credit"] < 0:
-            await scb.process_flaked_user(party, log["discord_id"])
+            await scb.process_flaked_user(
+                party, log["discord_id"], timestamp=log["timestamp"]
+            )
         else:
-            await scb.process_party_reward(party)
+            await scb.process_party_member(
+                party, log["discord_id"], timestamp=log["timestamp"]
+            )
     print("Done!")
 
 

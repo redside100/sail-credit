@@ -75,8 +75,10 @@ async def change_and_log_sail_credit(
     party_finished_at: int,
     old_ssc: int,
     new_ssc: int,
+    timestamp: int = None,
 ) -> None:
-    timestamp = int(time.time())
+    if not timestamp:
+        timestamp = int(time.time())
     await db.execute(
         "INSERT INTO sail_credit_log VALUES (?, ?, ?, ?, ?, ?, ?)",
         (

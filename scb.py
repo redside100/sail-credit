@@ -139,36 +139,37 @@ class SailCreditBureau:
         print(log)
         return reward
 
-    async def process_party_reward(self, party: Party) -> dict[str, dict[str, int]]:
+    async def process_party_member(
+        self, party: Party, user_id, timestamp: int = None
+    ) -> tuple[int, int, int]:
         """
-        Process the reward for each player in the party. Returns a dictionary of user
-        IDs and the amount of sail credit they received.
+        Process the reward a player in the party. Returns a tuple containing the user's
+        old SSC balance, new SSC balance, and the amount of SSC gained.
         """
-        data = {}
-        for member in party.members:
-            user = await db.get_user(member.user_id)
-            data[member.user_id] = {"old": user["sail_credit"], "new": None}
-            history = await db.get_user_sail_credit_log(
-                member.user_id, self.LOOKBACK_WINDOW
-            )
-            reward = await self.credit(
-                member.user_id, user["sail_credit"], len(history)
-            )
-            data[member.user_id]["new"] = user["sail_credit"] + reward
-            await db.change_and_log_sail_credit(
-                member.user_id,
-                party.size,
-                party.created_at,
-                party.finished_at,
-                user["sail_credit"],
-                user["sail_credit"] + reward,
-            )
-        return data
+        user = await db.get_user(user_id)
+        history = await db.get_user_sail_credit_log(user_id, self.LOOKBACK_WINDOW)
+        reward = await self.credit(user_id, user["sail_credit"], len(history))
+        kwargs = {}
+        if timestamp:
+            kwargs["timestamp"] = timestamp
+        await db.change_and_log_sail_credit(
+            user_id,
+            party.size,
+            party.created_at,
+            party.finished_at,
+            user["sail_credit"],
+            user["sail_credit"] + reward,
+            **kwargs,
+        )
+        return (user["sail_credit"], user["sail_credit"] + reward, reward)
 
-    async def process_flaked_user(self, party: Party, user_id: int) -> dict[str, int]:
+    async def process_flaked_user(
+        self, party: Party, user_id: int, timestamp: int = None
+    ) -> tuple[int, int, int]:
         """
-        Process the punishment for the user who flaked on the party. Returns how much
-        SSC was deducted from the user.
+        Process the punishment for the user who flaked on the party. Returns a tuple
+        containing the user's old SSC balance, new SSC balance, and the amount of SSC
+        deducted.
         """
         user = await db.get_user(user_id)
 
@@ -191,6 +192,9 @@ class SailCreditBureau:
             party.size,
         )
 
+        kwargs = {}
+        if timestamp:
+            kwargs["timestamp"] = timestamp
         await db.change_and_log_sail_credit(
             user_id,
             party.size,
@@ -198,11 +202,9 @@ class SailCreditBureau:
             party.finished_at,
             user["sail_credit"],
             user["sail_credit"] + penalty,
+            **kwargs,
         )
-        return {
-            "old": user["sail_credit"],
-            "new": user["sail_credit"] + penalty,
-        }
+        return (user["sail_credit"], user["sail_credit"] + penalty, penalty)
 
     def _percent(self, x: float) -> float:
         return round(x * 100, 3)
