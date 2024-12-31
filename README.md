@@ -14,7 +14,7 @@ The party system is intended to allow for members of a server to co-ordinate par
 
 ### Sail Social Credit (SSC) System
 
-The Sail Social Credit (SSC) System was created to ensure that people's time would be respected when creating a lobby.
+The Sail Social Credit (SSC) System was created to ensure that people's time would be respected when creating a party.
 
 - Members who successfully join a party and gets into game with no issues will receive some SSC.
 - A majority of party members can choose to report another party member if after the party has started and they are not present. The reported member will receive a deduction of SSC.
