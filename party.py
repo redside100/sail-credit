@@ -181,6 +181,9 @@ class PartyService:
         if not interaction:
             return
 
+        # We need to edit/reply to the original message because our auth token for the followup channel may have expired.
+        message = await interaction.original_response()
+
         # Slightly stricter requirements here, the party needs to be full and more than 1 person to auto start.
         # If not, the party can still be started manually.
         async def unschedule_party():
@@ -188,26 +191,24 @@ class PartyService:
             party.start_time = None
 
             # Edit the original message to reflect it
-            await interaction.edit_original_response(
+            await message.edit(
                 embed=create_embed(party.generate_embed()),
                 view=PartyView(party, self, scheduled=False),
             )
 
         # We can't start parties with less than 2 members.
         if len(party.members) < 2:
-            await interaction.followup.send(
+            await message.reply(
                 f"<@{party.owner_id}> This party can't be started automatically since it has less than 2 people. You can make a new party to try again."
             )
             self.remove_party(party.uuid)
             party.start_time = None
-            await interaction.edit_original_response(
-                embed=create_embed(party.generate_embed()), view=None
-            )
+            await message.edit(embed=create_embed(party.generate_embed()), view=None)
             return
 
         # We can't start parties that aren't full.
         if len(party.members) < party.size:
-            await interaction.followup.send(
+            await message.reply(
                 f"<@{party.owner_id}> This party wasn't started automatically since it isn't full. You can still start it manually by clicking **Start** in the original message!"
             )
             await unschedule_party()
@@ -221,7 +222,7 @@ class PartyService:
         report_msg = "For the next 5 minutes, any party member can click the **Report** button to report a flaker."
 
         next_view = PostPartyView(party, None)
-        next_view.message = await interaction.followup.send(
+        next_view.message = await message.reply(
             content="The party has started! Come join "
             + ", ".join(party_mentions)
             + ".",
@@ -233,7 +234,6 @@ class PartyService:
 
         self.remove_party(party.uuid)
 
-        message = await interaction.original_response()
         await disable_buttons_and_stop_view(
             discord.ui.View().from_message(message), interaction
         )
