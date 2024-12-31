@@ -184,6 +184,9 @@ class PartyService:
         # We need to edit/reply to the original message because our auth token for the followup channel may have expired.
         message = await interaction.original_response()
 
+        # we need to refetch this message in order to edit it (auth)
+        message = await message.channel.fetch_message(message.id)
+
         # Slightly stricter requirements here, the party needs to be full and more than 1 person to auto start.
         # If not, the party can still be started manually.
         async def unschedule_party():
@@ -235,7 +238,7 @@ class PartyService:
         self.remove_party(party.uuid)
 
         await disable_buttons_and_stop_view(
-            discord.ui.View().from_message(message), interaction
+            discord.ui.View().from_message(message), message
         )
 
     def get_party(self, uuid: UUID) -> Optional[Party]:
