@@ -1,3 +1,15 @@
+# Sail Credit Bureau
+
+The Sail Credit Bureau (SCB) is here to help organize members of the community into parties for state-sanctioned activities and games. Those who do not respect the time of their fellow members will have their standings in the community affected (deduction to total Sail Social Credit (SSC) balance).
+
+# Functionality
+
+### Party System
+
+- Create parties for a specific role!
+
+### Sail Social Credit (SSC) System
+
 # Setting up the dev environment
 
 1. Running Python 3.12+, Create a new Python virtual environment: `python -m venv venv`
