@@ -1,4 +1,6 @@
+from datetime import datetime, timedelta, timezone
 import functools
+import time
 from typing import Literal, Optional
 import discord
 from pytimeparse import parse as timeparse
@@ -103,8 +105,8 @@ async def create_ssc_graph_url(
     discord_id: str, name: str, period: Literal["1h", "6h", "12h", "1d", "7d", "30d"]
 ) -> str:
 
-    lookback = timeparse(period)
-    credit_log = await db.get_user_sail_credit_log(discord_id, lookback)
+    start_timestamp = int(time.time()) - timeparse(period)
+    credit_log = await db.get_user_sail_credit_log(discord_id, start_timestamp)
 
     qc_data = down_scale_data(
         [{"x": d["timestamp"] * 1000, "y": d["new_sail_credit"]} for d in credit_log],
@@ -150,3 +152,11 @@ async def create_ssc_graph_url(
     }
 
     return qc.get_short_url()
+
+
+def get_last_reset_time():
+    now = datetime.now(timezone.utc)
+    if now.hour < 8:
+        now -= timedelta(days=1)
+
+    return int(now.replace(hour=8, minute=0, second=0, microsecond=0).timestamp())

@@ -3,6 +3,7 @@ import time
 from party import Party
 import db
 import party
+from util import get_last_reset_time
 
 
 class SailCreditBureau:
@@ -19,10 +20,6 @@ class SailCreditBureau:
 
     # How much sail credit to deduct from a user for flaking on a party.
     BASE_PENALTY = -200
-
-    # How far back we check for previous parties, in seconds. Reward should be
-    # decreased for each party joined within this time frame.
-    LOOKBACK_WINDOW = 60 * 60 * 24  # 24 hours
 
     # How far back we check for previous flake incidents, in seconds.
     FLAKE_WINDOW = 60 * 60 * 24 * 30  # 30 days
@@ -147,8 +144,9 @@ class SailCreditBureau:
         old SSC balance, new SSC balance, and the amount of SSC gained.
         """
         user = await db.get_user(user_id)
+        last_reset_timestamp = get_last_reset_time()
         history = await db.get_user_sail_credit_log(
-            user_id, self.LOOKBACK_WINDOW, exclude_admin=True
+            user_id, last_reset_timestamp, exclude_admin=True
         )
         reward = await self.credit(user_id, user["sail_credit"], len(history))
         kwargs = {}
@@ -180,8 +178,9 @@ class SailCreditBureau:
 
         # Calculate how many times in the FLAKE_WINDOW has the user flaked.
         days_flaked = set()
+        start_timestamp = int(time.time()) - self.FLAKE_WINDOW
         history = await db.get_user_sail_credit_log(
-            user_id, self.FLAKE_WINDOW, exclude_admin=True
+            user_id, start_timestamp, exclude_admin=True
         )
         for entry in history:
             if entry["new_sail_credit"] - entry["prev_sail_credit"] < 0:
