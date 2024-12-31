@@ -55,7 +55,7 @@ async def create_party(
 
     await interaction.response.send_message(
         content=content,
-        embed=create_embed(party.generate_embed()),
+        embed=create_embed(**party.generate_embed()),
         view=PartyView(party, party_service),
         ephemeral=False,
         allowed_mentions=discord.AllowedMentions(),

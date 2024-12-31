@@ -55,8 +55,10 @@ def user_interaction_callback():
     return wrapper
 
 
-def create_embed(message: str, title: Optional[str] = None):
-    embed = discord.Embed(color=0xFFAE00)
+def create_embed(
+    message: str, title: Optional[str] = None, color: int | discord.Colour = 0xFFAE00
+):
+    embed = discord.Embed(color=color)
     embed.description = message
     if title:
         embed.title = title

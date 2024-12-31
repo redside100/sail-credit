@@ -66,7 +66,7 @@ class Party:
         if self.waitlist:
             content += f"\n{waitlist_string}\n"
 
-        return content
+        return {"message": content, "color": self.role.color}
 
     """
     Adds a party member.
@@ -195,7 +195,7 @@ class PartyService:
 
             # Edit the original message to reflect it
             await message.edit(
-                embed=create_embed(party.generate_embed()),
+                embed=create_embed(**party.generate_embed()),
                 view=PartyView(party, self, scheduled=False),
             )
 
@@ -206,7 +206,7 @@ class PartyService:
             )
             self.remove_party(party.uuid)
             party.start_time = None
-            await message.edit(embed=create_embed(party.generate_embed()), view=None)
+            await message.edit(embed=create_embed(**party.generate_embed()), view=None)
             return
 
         # We can't start parties that aren't full.
