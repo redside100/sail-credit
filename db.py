@@ -55,13 +55,14 @@ async def set_user(discord_id: int, sail_credit: int) -> None:
 
 
 async def get_user_sail_credit_log(
-    discord_id: int, lookback: int
+    discord_id: int, lookback: int, exclude_admin=False
 ) -> List[Dict[str, Any]]:
     timestamp = int(time.time())
 
     earliest_timestamp = timestamp - lookback
+    exclude_clause = "AND source != 'ADMIN'" if exclude_admin else ""
     async with db.execute(
-        "SELECT * FROM sail_credit_log WHERE discord_id = ? AND timestamp > ? ORDER BY timestamp DESC",
+        f"SELECT * FROM sail_credit_log WHERE discord_id = ? AND timestamp > ? {exclude_clause} ORDER BY timestamp DESC",
         (discord_id, earliest_timestamp),
     ) as cursor:
         rows = await cursor.fetchall()

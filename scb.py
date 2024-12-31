@@ -147,7 +147,9 @@ class SailCreditBureau:
         old SSC balance, new SSC balance, and the amount of SSC gained.
         """
         user = await db.get_user(user_id)
-        history = await db.get_user_sail_credit_log(user_id, self.LOOKBACK_WINDOW)
+        history = await db.get_user_sail_credit_log(
+            user_id, self.LOOKBACK_WINDOW, exclude_admin=True
+        )
         reward = await self.credit(user_id, user["sail_credit"], len(history))
         kwargs = {}
         if timestamp:
@@ -178,7 +180,9 @@ class SailCreditBureau:
 
         # Calculate how many times in the FLAKE_WINDOW has the user flaked.
         days_flaked = set()
-        history = await db.get_user_sail_credit_log(user_id, self.FLAKE_WINDOW)
+        history = await db.get_user_sail_credit_log(
+            user_id, self.FLAKE_WINDOW, exclude_admin=True
+        )
         for entry in history:
             if entry["new_sail_credit"] - entry["prev_sail_credit"] < 0:
                 days_flaked.add(round_nearest_day(entry["timestamp"]))
