@@ -6,6 +6,7 @@ import discord
 from pytimeparse import parse as timeparse
 import db
 from quickchart import QuickChart
+from dateutil import parser, tz
 
 
 def user_command():
@@ -162,3 +163,41 @@ def get_last_reset_time():
         now -= timedelta(days=1)
 
     return int(now.replace(hour=8, minute=0, second=0, microsecond=0).timestamp())
+
+
+def get_scheduled_datetime_from_string(date_input: str) -> datetime:
+
+    default_datetime = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+    current_timestamp = int(time.time())
+    current_datetime = datetime.now(tz=timezone.utc)
+    # Parse the time using dateutil parser.
+    # Default timezone to EST if not included in the input string.
+    try:
+        dt = parser.parse(
+            date_input,
+            tzinfos={
+                "EST": tz.gettz("Eastern Standard Time"),
+                "PST": tz.gettz("Pacific Standard Time"),
+                None: tz.gettz("Eastern Standard Time"),
+            },
+        ).astimezone(tz=timezone.utc)
+    except parser.ParserError:
+        return default_datetime
+
+    # If the parser interpretted it as a date in the past, add 1 day.
+    if dt < current_datetime:
+        dt += timedelta(days=1)
+
+    # If the date is still in the past, default.
+    if dt < current_datetime:
+        return default_datetime
+
+    # If the date is less than 10 seconds away, set it to 10 seconds away.
+    if int(dt.timestamp()) - current_timestamp < 10:
+        return current_datetime + timedelta(seconds=10)
+
+    # If the date is more than 12 hours away, set it to 12 hours away.
+    if int(dt.timestamp()) - current_timestamp > 3600 * 12:
+        return current_datetime + timedelta(hours=12)
+
+    return dt

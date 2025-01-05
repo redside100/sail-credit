@@ -1,4 +1,5 @@
 import asyncio
+import os
 import time
 from typing import Literal, Optional
 from discord import app_commands
@@ -7,7 +8,13 @@ from discord.ext import commands
 import db
 from party import Party, PartyService
 
-from util import create_ssc_graph_url, divide_chunks, user_command, create_embed
+from util import (
+    create_ssc_graph_url,
+    divide_chunks,
+    get_scheduled_datetime_from_string,
+    user_command,
+    create_embed,
+)
 from views import LeaderboardView, PartyView
 
 intents = discord.Intents.default()
@@ -29,6 +36,7 @@ party_service: Optional[PartyService] = None
     name="The name of the party (optional)",
     size="The size of the party (default is 5)",
     description="Any additional information you want to provide about the party.",
+    start_time="The optional, initial scheduled time for the party to automatically start, recognized on a best effort basis. The recommended format is HH:MM [EST/PST]. Default timezone (if not provided) is EST.",
 )
 @user_command()
 async def create_party(
@@ -37,8 +45,14 @@ async def create_party(
     name: Optional[str],
     size: Optional[int],
     description: Optional[str],
+    start_time: Optional[str],
 ):
     created_at = int(time.time())
+
+    parsed_start_time = None
+    if start_time:
+        parsed_start_time = get_scheduled_datetime_from_string(start_time)
+
     party: Party = party_service.create_party(
         user=interaction.user,
         role=role,
@@ -47,6 +61,7 @@ async def create_party(
         description=description,
         created_at=created_at,
         interaction=interaction,
+        start_time=parsed_start_time,
     )
 
     content = f"<@{interaction.user.id}> has created a party for <@&{role.id}>!\n"
@@ -288,7 +303,8 @@ def patch_close():
 if __name__ == "__main__":
     asyncio.run(db.init())
 
-    with open("token", "r") as f:
+    token_file = "test_token" if os.environ.get("SC_TEST") else "token"
+    with open(token_file, "r") as f:
         token = f.read()
 
     patch_close()

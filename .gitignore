@@ -162,6 +162,7 @@ cython_debug/
 #.idea/
 *.db
 token
+test_token
 
 # vscode
 .vscode

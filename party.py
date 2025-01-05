@@ -127,6 +127,7 @@ class PartyService:
     def create_party(
         self,
         user: User | Member,
+        start_time: Optional[datetime],
         **kwargs,
     ) -> Party:
         # We don't want to pass None values to the Party constructor, preserving
@@ -142,8 +143,13 @@ class PartyService:
 
         party_uuid = uuid4()
 
-        # add start job to scheduler with default 5 mins
+        # Add start job to scheduler with default 5 mins
         run_date = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+
+        # Check if we have an initial start time
+        if start_time:
+            run_date = start_time
+
         self.scheduler.add_job(
             self._start_scheduled_party,
             "date",
