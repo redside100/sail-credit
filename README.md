@@ -2,6 +2,8 @@
 
 The Sail Credit Bureau (SCB) is here to help organize members of the community into parties for state-sanctioned activities and games. Those who do not respect the time of their fellow members will have their standings in the community affected (deduction to total Sail Social Credit (SSC) balance).
 
+Made for Sail Hackathon 2024!
+
 # Functionality
 
 ### Party System
