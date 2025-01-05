@@ -3,17 +3,27 @@ import sqlite3
 
 
 def setup():
-    if not os.path.isfile("sail_credit.db"):
+
+    first_time_db_setup = not os.path.isfile("sail_credit.db")
+    if first_time_db_setup:
         print("Database file not found. Setting it up...")
         open("sail_credit.db", "a").close()
 
-        with open("schema.sql", "r") as f:
-            script = f.read()
+    with open("schema.sql", "r") as f, open("migrations.sql", "r") as m:
+        script = f.read()
+        migrations = m.read()
 
-        db = sqlite3.connect("sail_credit.db")
+    db = sqlite3.connect("sail_credit.db")
+
+    if first_time_db_setup:
         db.cursor().executescript(script)
-        db.commit()
-        db.close()
+
+    print("Running migrations...")
+    # Always run migrations
+    db.cursor().executescript(migrations)
+
+    db.commit()
+    db.close()
 
     if not os.path.isfile("token"):
         print("Token file not found. Setting it up...")
