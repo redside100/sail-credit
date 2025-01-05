@@ -6,7 +6,8 @@ import discord
 from pytimeparse import parse as timeparse
 import db
 from quickchart import QuickChart
-from dateutil import parser, tz
+from dateutil import parser
+from zoneinfo import ZoneInfo
 
 
 def user_command():
@@ -176,9 +177,9 @@ def get_scheduled_datetime_from_string(date_input: str) -> datetime:
         dt = parser.parse(
             date_input,
             tzinfos={
-                "EST": tz.gettz("Eastern Standard Time"),
-                "PST": tz.gettz("Pacific Standard Time"),
-                None: tz.gettz("Eastern Standard Time"),
+                "EST": ZoneInfo("US/Eastern"),
+                "PST": ZoneInfo("US/Pacific"),
+                None: ZoneInfo("US/Eastern"),
             },
         ).astimezone(tz=timezone.utc)
     except parser.ParserError:
