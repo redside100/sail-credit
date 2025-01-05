@@ -10,3 +10,11 @@ repos:
     rev: 22.10.0
     hooks:
       - id: black
+  - repo: local
+    hooks:
+      - id: requirements-sync-check
+        name: requirements-sync-check
+        entry: python requirements_pre_commit_hook.py
+        language: system
+        types: [python]
+        pass_filenames: false
