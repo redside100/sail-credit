@@ -1,17 +1,13 @@
-from datetime import timedelta
 import math
 import time
 from typing import List
-from uuid import UUID
 import discord
 
-import db
-from party import Party, PartyMember, PartyMemberStatus, PartyService, PartyStatus
+from party import Party, PartyMemberStatus, PartyService, PartyStatus
 from scb import SailCreditBureau
 from util import (
     create_embed,
     disable_buttons_and_stop_view,
-    user_command,
     user_interaction_callback,
 )
 

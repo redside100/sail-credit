@@ -1,7 +1,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 from enum import Enum
 from uuid import UUID, uuid4
 from discord import User, Member
