@@ -3,6 +3,7 @@ import time
 from typing import List
 import discord
 
+import db
 from party import Party, PartyMemberStatus, PartyService, PartyStatus
 from scb import SailCreditBureau
 from util import (
@@ -324,9 +325,31 @@ class ReportSelectView(discord.ui.View):
             )
             return
 
-        view = ReportView(self.party, selected_id)
+        await interaction.response.send_modal(
+            ReportReasonModal(selected_id, selected_member.name)
+        )
+
+        self.stop()
+
+
+class ReportReasonModal(discord.ui.Modal):
+    reason = discord.ui.TextInput(
+        label="Reason",
+        placeholder="Enter the report reason here...",
+        style=discord.TextStyle.long,
+        required=True,
+        max_length=256,
+    )
+
+    async def __init__(self, selected_id, selected_name):
+        super().__init__(title=f"Reporting {selected_name}")
+        self.selected_id = selected_id
+        self.selected_name = selected_name
+
+    async def on_submit(self, interaction: discord.Interaction):
+        view = ReportView(self.party, self.selected_id, self.reason)
         await interaction.response.send_message(
-            content=f" <@{selected_id}> has been reported by <@{self.reporter_id}>.",
+            content=f" <@{self.selected_id}> has been reported by <@{self.reporter_id}>.\nReason: `{self.reason}`",
             embed=create_embed(view.generate_embed()),
             view=view,
             ephemeral=False,
@@ -336,10 +359,11 @@ class ReportSelectView(discord.ui.View):
 
 
 class ReportView(discord.ui.View):
-    def __init__(self, party: Party, reported_id: int):
+    def __init__(self, party: Party, reported_id: int, reason: str):
         self.party = party
         self.party.status = PartyStatus.VOTING
         self.reported_id = reported_id
+        self.reason = reason
         self.convict_votes = []
         self.acquit_votes = []
         super().__init__(timeout=300)  # 5m
@@ -405,6 +429,8 @@ class ReportView(discord.ui.View):
 
         if len(self.convict_votes) >= self.votes_needed:
             fine = await scb.process_flaked_user(self.party, self.reported_id)
+            # Log reason into the conviction log table.
+            await db.log_convict_reason(self.reported_id, self.reason)
             content = f"**CONVICTED.** 🔨\n\n"
             content += f"<@{self.reported_id}> has been fined {fine[2]} SSC "
             content += f"({fine[0]} SSC -> {fine[1]} SSC) for flaking."

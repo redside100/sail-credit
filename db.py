@@ -98,6 +98,14 @@ async def change_and_log_sail_credit(
     await db.commit()
 
 
+async def log_convict_reason(discord_id: int, reason: str) -> None:
+    now = int(time.time())
+    await db.execute(
+        "INSERT INTO conviction_log VALUES (?, ?, ?)", (discord_id, reason, now)
+    )
+    await db.commit()
+
+
 async def get_all_users() -> List[Dict[str, Any]]:
     async with db.execute("SELECT * FROM users") as cursor:
         rows = await cursor.fetchall()
