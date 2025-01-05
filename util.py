@@ -173,15 +173,26 @@ def get_scheduled_datetime_from_string(date_input: str) -> datetime:
     current_datetime = datetime.now(tz=timezone.utc)
     # Parse the time using dateutil parser.
     # Default timezone to EST if not included in the input string.
+    zone_est = ZoneInfo("US/Eastern")
+    zone_pst = ZoneInfo("US/Pacific")
     try:
         dt = parser.parse(
             date_input,
             tzinfos={
-                "EST": ZoneInfo("US/Eastern"),
-                "PST": ZoneInfo("US/Pacific"),
-                None: ZoneInfo("US/Eastern"),
+                "EST": zone_est,
+                "PST": zone_pst,
+                None: zone_est,
             },
-        ).astimezone(tz=timezone.utc)
+        )
+
+        # Try to parse it as today's date (in EST or PST)
+        if dt.tzinfo is zone_est:
+            dt = dt.replace(day=datetime.now(zone_est).day)
+        elif dt.tzinfo is zone_pst:
+            dt = dt.replace(day=datetime.now(zone_pst).day)
+
+        dt = dt.astimezone(timezone.utc)
+
     except parser.ParserError:
         return default_datetime
 
