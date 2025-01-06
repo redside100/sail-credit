@@ -15,7 +15,7 @@ from util import (
     user_command,
     create_embed,
 )
-from views import LeaderboardView, PartyView
+from views import LeaderboardView, MessageBook, PartyView
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -279,6 +279,48 @@ async def adjust_ssc(interaction: discord.Interaction, user: discord.User, delta
         ),
     )
     return
+
+
+@bot.tree.command(
+    name="conviction-log",
+    description="See your or someone else's conviction log!",
+)
+@app_commands.describe(
+    user="The user's conviction log to view.",
+)
+@user_command()
+async def conviction_log(
+    interaction: discord.Interaction, user: Optional[discord.User] = None
+):
+
+    user_id = interaction.user.id if not user else user.id
+    user_name = interaction.user.display_name if not user else user.display_name
+    conviction_log = await db.get_conviction_log(user_id)
+
+    if not conviction_log:
+        await interaction.response.send_message(
+            embed=create_embed(message="No convictions found!"),
+            ephemeral=True,
+        )
+        return
+
+    pages = []
+    chunks = divide_chunks(conviction_log, 10)
+
+    for chunk in chunks:
+        page_contents = []
+        for log in chunk:
+            page_contents.append(f"<t:{log['timestamp']}:f> **-** `{log['reason']}`")
+
+        pages.append(
+            create_embed(
+                title=f"{user_name}'s Convicition Log", message="\n".join(page_contents)
+            )
+        )
+
+    await interaction.response.send_message(
+        embed=pages[0], view=MessageBook(interaction.user.id, pages=pages)
+    )
 
 
 @bot.event

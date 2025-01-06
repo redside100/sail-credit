@@ -314,6 +314,14 @@ class ReportSelectView(discord.ui.View):
     async def select_user(self, interaction: discord.Interaction):
         selected_id = int(self.select.values[0])
 
+        # Check if the party is already voting.
+        if self.party.status == PartyStatus.VOTING:
+            await interaction.response.send_message(
+                "Voting has already started. Please wait for the current vote to end.",
+                ephemeral=True,
+            )
+            return
+
         # Check if the party member has already been reported.
         selected_member = next(
             (member for member in self.party.members if member.user_id == selected_id),
@@ -326,7 +334,9 @@ class ReportSelectView(discord.ui.View):
             return
 
         await interaction.response.send_modal(
-            ReportReasonModal(selected_id, selected_member.name)
+            ReportReasonModal(
+                self.party, selected_id, selected_member.name, interaction.user.id
+            )
         )
 
         self.stop()
@@ -338,18 +348,44 @@ class ReportReasonModal(discord.ui.Modal):
         placeholder="Enter the report reason here...",
         style=discord.TextStyle.long,
         required=True,
-        max_length=256,
+        max_length=128,
     )
 
-    async def __init__(self, selected_id, selected_name):
-        super().__init__(title=f"Reporting {selected_name}")
+    def __init__(self, party, selected_id, selected_name, reporter_id):
+        super().__init__(title=f"Report {selected_name} for Flaking")
+        self.party = party
         self.selected_id = selected_id
         self.selected_name = selected_name
+        self.reporter_id = reporter_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        view = ReportView(self.party, self.selected_id, self.reason)
+
+        # Check if the party is already voting.
+        if self.party.status == PartyStatus.VOTING:
+            await interaction.response.send_message(
+                "Voting has already started. Please wait for the current vote to end.",
+                ephemeral=True,
+            )
+            return
+
+        # Check if the party member has already been reported.
+        selected_member = next(
+            (
+                member
+                for member in self.party.members
+                if member.user_id == self.selected_id
+            ),
+            None,
+        )
+        if selected_member.status == PartyMemberStatus.FLAKED:
+            await interaction.response.send_message(
+                "This user has already been reported.", ephemeral=True
+            )
+            return
+
+        view = ReportView(self.party, self.selected_id, self.reason.value)
         await interaction.response.send_message(
-            content=f" <@{self.selected_id}> has been reported by <@{self.reporter_id}>.\nReason: `{self.reason}`",
+            content=f" <@{self.selected_id}> has been reported by <@{self.reporter_id}>.\nReason: `{self.reason.value}`",
             embed=create_embed(view.generate_embed()),
             view=view,
             ephemeral=False,

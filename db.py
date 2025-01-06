@@ -131,3 +131,12 @@ async def get_ssc_leaderboard() -> List[Dict[str, Any]]:
     ) as cursor:
         rows = await cursor.fetchall()
         return rows
+
+
+async def get_conviction_log(discord_id: int) -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT discord_id, reason, timestamp FROM conviction_log WHERE discord_id = ? ORDER BY timestamp DESC",
+        (discord_id,),
+    ) as cursor:
+        rows = await cursor.fetchall()
+        return rows
