@@ -24,6 +24,9 @@ class SailCreditBureau:
     # How far back we check for previous flake incidents, in seconds.
     FLAKE_WINDOW = 60 * 60 * 24 * 30  # 30 days
 
+    # Multiplier to reduce SSC gain from 2 member parties.
+    SMALL_PARTY_MULTIPLIER = 0.6
+
     async def process(flake: bool):
         """
         Handles the process of calculating sail credit for a user based on whether they
@@ -95,11 +98,16 @@ class SailCreditBureau:
         # 6. Round up to the nearest integer.
         penalty = math.ceil(penalty)
 
+        # 7. If the penalty is greater than their current SSC, limit it to their current SSC.
+        penalty = min(current_ssc, penalty)
+
         log += f"= {penalty} SSC for flaking on a party."
         print(log)
         return penalty
 
-    async def credit(self, user_id: int, current_ssc: int, parties_joined: int):
+    async def credit(
+        self, user_id: int, current_ssc: int, parties_joined: int, party_size: int
+    ):
         """
         Method for calculating how much sail credit to give to a user for not flaking
         on a party.
@@ -110,6 +118,9 @@ class SailCreditBureau:
         - The number of parties the user has participated in the past period.
             - RATIONALE: Subsequent parties in a day should not be as rewarding. This
             rewards consistency instead of just joining a bunch of parties in a day.
+        - The party size.
+            - RATIONALE: Lower the reward for parties of two. Parties of two are a
+            special case, and can be easily abused.
         """
         # 1. The base reward for joining a party.
         reward = self.BASE_REWARD
@@ -129,7 +140,11 @@ class SailCreditBureau:
             reward *= tax_ratio
             log += f"* tax:{self._percent(tax_ratio)}% "
 
-        # 4. Round up to the nearest integer.
+        # 4. Reduce the amount of SSC gained from parties of two.
+        if party_size <= 2:
+            reward *= self.SMALL_PARTY_MULTIPLIER
+
+        # 5. Round up to the nearest integer.
         reward = math.ceil(reward)
 
         log += f"= {reward} SSC for joining a party."
@@ -148,13 +163,15 @@ class SailCreditBureau:
         history = await db.get_user_sail_credit_log(
             user_id, last_reset_timestamp, exclude_admin=True
         )
-        reward = await self.credit(user_id, user["sail_credit"], len(history))
+        reward = await self.credit(
+            user_id, user["sail_credit"], len(history), len(party.members)
+        )
         kwargs = {}
         if timestamp:
             kwargs["timestamp"] = timestamp
         await db.change_and_log_sail_credit(
             user_id,
-            party.size,
+            len(party.members),
             party.created_at,
             party.finished_at,
             user["sail_credit"],
@@ -192,7 +209,7 @@ class SailCreditBureau:
             user["sail_credit"],
             len(days_flaked),
             party.finished_at - party.created_at,
-            party.size,
+            len(party.members),
         )
 
         kwargs = {}

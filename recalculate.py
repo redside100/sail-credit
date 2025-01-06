@@ -58,6 +58,7 @@ async def calculate():
             created_at=log["party_created_at"],
             finished_at=log["party_finished_at"],
             size=log["party_size"],
+            members=[PartyMember(0, "") for _ in range(log["party_size"])],
         )
         if log["new_sail_credit"] - log["prev_sail_credit"] < 0:
             await scb.process_flaked_user(
