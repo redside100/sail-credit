@@ -45,17 +45,21 @@ class Party:
     start_time: Optional[int] = None
     interaction: Optional[discord.Interaction] = None
     jump_url: Optional[str] = None
-    size: int = 5
+    max_size: int = 5
     status: PartyStatus = PartyStatus.ASSEMBLING
     description: str = ""
     members: list[PartyMember] = field(default_factory=lambda: [])
     waitlist: deque[PartyMember] = field(default_factory=lambda: deque())
 
+    @property
+    def size(self) -> int:
+        return len(self.members)
+
     def generate_embed(self) -> str:
         start_string = f"\n\nStarts: <t:{self.start_time}:R>" if self.start_time else ""
         waitlist_mentions = [f"<@{m.user_id}>" for m in self.waitlist]
         waitlist_string = f"Waitlist: {" ".join(waitlist_mentions)}"
-        remaining_spots = self.size - len(self.members)
+        remaining_spots = self.max_size - len(self.members)
         content = (
             f"**{self.name}**\n\n`{remaining_spots}` spot{'s' if remaining_spots != 1 else ''} left.{start_string}\n\n"
             + f"Current Party:\n"
@@ -78,7 +82,7 @@ class Party:
         party_member = PartyMember(user_id=user_id, name=user_name)
 
         # There is space, add to member list.
-        if len(self.members) < self.size:
+        if len(self.members) < self.max_size:
             self.members.append(party_member)
             return False
 
@@ -206,7 +210,7 @@ class PartyService:
             )
 
         # We can't start parties with less than 2 members.
-        if len(party.members) < 2:
+        if party.size < 2:
             await message.reply(
                 f"<@{party.owner_id}> This party can't be started automatically since it has less than 2 people. You can make a new party to try again."
             )
@@ -216,7 +220,7 @@ class PartyService:
             return
 
         # We can't start parties that aren't full.
-        if len(party.members) < party.size:
+        if party.size < party.max_size:
             await message.reply(
                 f"<@{party.owner_id}> This party wasn't started automatically since it isn't full. You can still start it manually by clicking **Start** in the original message!"
             )

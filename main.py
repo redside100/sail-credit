@@ -34,7 +34,7 @@ party_service: Optional[PartyService] = None
 @app_commands.describe(
     role="The role of the party you're creating (e.g. @goofy「无畏契约」, @flaccid)",
     name="The name of the party (optional)",
-    size="The size of the party (default is 5)",
+    max_size="The max size of the party (default is 5)",
     description="Any additional information you want to provide about the party.",
     start_time="The optional, initial scheduled time for the party to automatically start, recognized on a best effort basis. The recommended format is HH:MM [EST/PST]. Default timezone (if not provided) is EST.",
 )
@@ -43,7 +43,7 @@ async def create_party(
     interaction: discord.Interaction,
     role: discord.Role,
     name: Optional[str],
-    size: Optional[int],
+    max_size: Optional[int],
     description: Optional[str],
     start_time: Optional[str],
 ):
@@ -57,7 +57,7 @@ async def create_party(
         user=interaction.user,
         role=role,
         name=name,
-        size=size,
+        max_size=max_size,
         description=description,
         created_at=created_at,
         interaction=interaction,

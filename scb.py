@@ -164,14 +164,14 @@ class SailCreditBureau:
             user_id, last_reset_timestamp, exclude_admin=True
         )
         reward = await self.credit(
-            user_id, user["sail_credit"], len(history), len(party.members)
+            user_id, user["sail_credit"], len(history), party.size
         )
         kwargs = {}
         if timestamp:
             kwargs["timestamp"] = timestamp
         await db.change_and_log_sail_credit(
             user_id,
-            len(party.members),
+            party.size,
             party.created_at,
             party.finished_at,
             user["sail_credit"],
@@ -209,7 +209,7 @@ class SailCreditBureau:
             user["sail_credit"],
             len(days_flaked),
             party.finished_at - party.created_at,
-            len(party.members),
+            party.size,
         )
 
         kwargs = {}
