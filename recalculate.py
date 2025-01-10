@@ -19,7 +19,9 @@ async def calculate():
 
     # Reset all user to their starting SSC.
     print("Resetting all users to default SSC...")
+    old_user_ssc = {}
     for user in await db.get_all_users():
+        old_user_ssc[user["discord_id"]] = user["sail_credit"]
         await db.set_user(user["discord_id"], STARTING_SSC)
 
     # Wipe the logs table.
@@ -68,6 +70,20 @@ async def calculate():
             await scb.process_party_member(
                 party, log["discord_id"], timestamp=log["timestamp"]
             )
+
+    print("Non-zero SSC deltas after recalculation:")
+
+    new_user_ssc = {
+        user["discord_id"]: user["sail_credit"] for user in await db.get_all_users()
+    }
+    for user_id in new_user_ssc:
+        old_ssc = old_user_ssc.get(user_id, 1000)
+        delta = new_user_ssc[user_id] - old_ssc
+        if delta != 0:
+            print(
+                f"[user-id={user_id}] {old_ssc} SSC -> {new_user_ssc[user_id]} SSC ({'+' if delta > 0 else ''}{delta})"
+            )
+
     print("Done!")
 
 
