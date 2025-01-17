@@ -148,7 +148,9 @@ class PartyView(discord.ui.View):
 
         # Add the user to the party
         waitlisted = self.party.add_member(
-            interaction.user.id, interaction.user.display_name
+            interaction.user.id,
+            interaction.user.display_name,
+            interaction.data["user_data"]["sail_credit"],
         )
 
         await interaction.response.defer()

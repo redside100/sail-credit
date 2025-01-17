@@ -31,6 +31,7 @@ class PartyMemberStatus(Enum):
 class PartyMember:
     user_id: int
     name: str
+    cached_ssc: int
     status: PartyMemberStatus = PartyMemberStatus.NEUTRAL
 
 
@@ -65,7 +66,10 @@ class Party:
             + f"Current Party:\n"
         )
         for member in self.members:
-            content += f"- {'👑 ' if member.user_id == self.owner_id else ''}<@{member.user_id}>\n"
+            content += f"- {'👑 ' if member.user_id == self.owner_id else ''}<@{member.user_id}>"
+            if member.cached_ssc < 900:
+                content += f' [(!)]({self.jump_url} "Warning: Party member has low SSC. Upon joining the party, they had {member.cached_ssc} SSC.")'
+            content += "\n"
 
         if self.waitlist:
             content += f"\n{waitlist_string}\n"
@@ -78,8 +82,8 @@ class Party:
     Returns true if waitlisted, false if not.
     """
 
-    def add_member(self, user_id: int, user_name: str) -> bool:
-        party_member = PartyMember(user_id=user_id, name=user_name)
+    def add_member(self, user_id: int, user_name: str, user_ssc: int) -> bool:
+        party_member = PartyMember(user_id=user_id, name=user_name, cached_ssc=user_ssc)
 
         # There is space, add to member list.
         if len(self.members) < self.max_size:
@@ -131,6 +135,7 @@ class PartyService:
     def create_party(
         self,
         user: User | Member,
+        user_ssc: int,
         start_time: Optional[datetime],
         **kwargs,
     ) -> Party:
@@ -165,7 +170,11 @@ class PartyService:
         party = Party(
             uuid=party_uuid,
             owner_id=user.id,
-            members=[PartyMember(user_id=user.id, name=user.display_name)],
+            members=[
+                PartyMember(
+                    user_id=user.id, name=user.display_name, cached_ssc=user_ssc
+                )
+            ],
             start_time=int(run_date.timestamp()),
             **party_kwargs,
         )

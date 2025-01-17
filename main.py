@@ -55,6 +55,7 @@ async def create_party(
 
     party: Party = party_service.create_party(
         user=interaction.user,
+        user_ssc=interaction.data["user_data"]["sail_credit"],
         role=role,
         name=name,
         max_size=max_size,
@@ -68,10 +69,9 @@ async def create_party(
     if party.description:
         content += f"Description: `{party.description}`\n"
 
+    # Don't send the party embed and view just yet, we need to get a message reference first
     await interaction.response.send_message(
         content=content,
-        embed=create_embed(**party.generate_embed()),
-        view=PartyView(party, party_service),
         ephemeral=False,
         allowed_mentions=discord.AllowedMentions(),
     )
@@ -79,6 +79,12 @@ async def create_party(
     # Get the jump URL (message link) for the party for management commands
     message = await interaction.original_response()
     party.jump_url = message.jump_url
+
+    # Edit in the party embed and view now
+    await interaction.edit_original_response(
+        embed=create_embed(**party.generate_embed()),
+        view=PartyView(party, party_service),
+    )
 
 
 @bot.tree.command(
