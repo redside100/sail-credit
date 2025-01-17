@@ -185,20 +185,15 @@ def get_scheduled_datetime_from_string(date_input: str) -> datetime:
             },
         )
 
-        # Try to parse it as today's date (in EST or PST)
-        if dt.tzinfo is zone_est:
-            dt = dt.replace(day=datetime.now(zone_est).day)
-        elif dt.tzinfo is zone_pst:
-            dt = dt.replace(day=datetime.now(zone_pst).day)
-
         dt = dt.astimezone(timezone.utc)
 
     except parser.ParserError:
         return default_datetime
 
-    # If the parser interpretted it as a date in the past, add 1 day.
-    if dt < current_datetime:
-        dt += timedelta(days=1)
+    # If the parser interpretted it as a date in the past, add 12 hours, up to 2 times.
+    for _ in range(2):
+        if dt < current_datetime:
+            dt += timedelta(hours=12)
 
     # If the date is still in the past, default.
     if dt < current_datetime:
