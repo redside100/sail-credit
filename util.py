@@ -183,6 +183,7 @@ def get_scheduled_datetime_from_string(date_input: str) -> datetime:
                 "PST": zone_pst,
                 None: zone_est,
             },
+            fuzzy=True,
         )
 
         dt = dt.astimezone(timezone.utc)
