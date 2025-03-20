@@ -279,8 +279,6 @@ async def link_image(
         )
         return
 
-    await db.update_role_image_url(role.id, image_url)
-
     try:
         await interaction.response.send_message(
             embed=create_embed(
@@ -288,8 +286,9 @@ async def link_image(
                 image_url=image_url,
             ),
         )
+        await db.update_role_image_url(role.id, image_url)
+
     except discord.HTTPException:
-        await db.update_role_image_url(role.id, None)
         await interaction.response.send_message(
             embed=create_embed(
                 message="There was an error with the image URL, it might be malformed!",
