@@ -59,12 +59,17 @@ def user_interaction_callback():
 
 
 def create_embed(
-    message: str, title: Optional[str] = None, color: int | discord.Colour = 0xFFAE00
+    message: str,
+    title: Optional[str] = None,
+    color: int | discord.Colour = 0xFFAE00,
+    image_url: str = None,
 ):
     embed = discord.Embed(color=color)
     embed.description = message
     if title:
         embed.title = title
+    if image_url:
+        embed.set_image(url=image_url)
     return embed
 
 

@@ -42,6 +42,7 @@ class Party:
     name: str
     owner_id: Optional[int]
     created_at: int
+    role_image_url: Optional[int] = None
     finished_at: Optional[int] = None
     start_time: Optional[int] = None
     interaction: Optional[discord.Interaction] = None
@@ -68,13 +69,18 @@ class Party:
         for member in self.members:
             content += f"- {'👑 ' if member.user_id == self.owner_id else ''}<@{member.user_id}>"
             if member.cached_ssc < 900:
-                content += f' [(!)]({self.jump_url} "Warning: Party member has low SSC. Upon joining the party, they had {member.cached_ssc} SSC.")'
+                content += f' [(!)]({self.jump_url} "Warning: Party member has low SSC ({member.cached_ssc}).")'
             content += "\n"
 
         if self.waitlist:
             content += f"\n{waitlist_string}\n"
 
-        return {"message": content, "color": self.role.color}
+        embed_contents = {"message": content, "color": self.role.color}
+
+        if self.role_image_url:
+            embed_contents["image_url"] = self.role_image_url
+
+        return embed_contents
 
     """
     Adds a party member.

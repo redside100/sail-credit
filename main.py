@@ -64,6 +64,7 @@ async def create_party(
             )
             return
 
+    role_image_url = await db.get_role_image_url(role.id)
     party: Party = party_service.create_party(
         user=interaction.user,
         user_ssc=interaction.data["user_data"]["sail_credit"],
@@ -74,6 +75,7 @@ async def create_party(
         created_at=created_at,
         interaction=interaction,
         start_time=parsed_start_time,
+        role_image_url=role_image_url,
     )
 
     content = f"<@{interaction.user.id}> has created a party for <@&{role.id}>!\n"
@@ -248,6 +250,45 @@ async def search(interaction: discord.Interaction, role: discord.Role):
 
 
 @bot.tree.command(
+    name="link-image",
+    description="Link a party image to a role (or delete)",
+)
+@app_commands.describe(
+    role="The discord role to link the image to.",
+    image_url="The image URL to link to the role. Leave blank to delete the image.",
+)
+@user_command()
+async def link_image(
+    interaction: discord.Interaction, role: discord.Role, image_url: Optional[str]
+):
+
+    # Admin check.
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            embed=create_embed(message="You need admin priviliges to use this."),
+            ephemeral=True,
+        )
+        return
+
+    if not image_url:
+        await db.update_role_image_url(role.id, None)
+        await interaction.response.send_message(
+            embed=create_embed(
+                message=f"Deleted image link for <@&{role.id}>.",
+            ),
+        )
+        return
+
+    await db.update_role_image_url(role.id, image_url)
+    await interaction.response.send_message(
+        embed=create_embed(
+            message=f"Linked image URL `{image_url}` to <@&{role.id}>.",
+            image_url=image_url,
+        ),
+    )
+
+
+@bot.tree.command(
     name="adjust-ssc",
     description="Manually adjust a user's SSC. Requires admin privileges!",
 )
@@ -345,6 +386,7 @@ async def on_ready():
     global party_service
     party_service = PartyService()
     await bot.tree.sync()
+
     print("Ready!")
 
 
@@ -361,6 +403,9 @@ def patch_close():
 
 if __name__ == "__main__":
     asyncio.run(db.init())
+
+    # Run migrations
+    asyncio.run(db.run_migrations())
 
     token_file = "test_token" if os.environ.get("SC_TEST") else "token"
     with open(token_file, "r") as f:

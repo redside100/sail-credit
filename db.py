@@ -26,6 +26,13 @@ async def cleanup():
         await db.close()
 
 
+async def run_migrations():
+    with open("migrations.sql", "r") as f:
+        script = f.read()
+    await db.executescript(script)
+    await db.commit()
+
+
 async def create_user(discord_id: int) -> Dict[str, Any]:
     await db.execute(
         f"INSERT INTO users (discord_id, sail_credit) VALUES (?, {party.STARTING_SSC})",
@@ -140,3 +147,24 @@ async def get_conviction_log(discord_id: int) -> List[Dict[str, Any]]:
     ) as cursor:
         rows = await cursor.fetchall()
         return rows
+
+
+async def update_role_image_url(role_id: int, image_url: Optional[str]) -> None:
+    if image_url is None:
+        await db.execute("DELETE FROM role_images WHERE role_id = ?", (role_id,))
+    else:
+        await db.execute(
+            "INSERT OR REPLACE INTO role_images VALUES (?, ?)", (role_id, image_url)
+        )
+    await db.commit()
+
+
+async def get_role_image_url(role_id: int) -> Optional[str]:
+    async with db.execute(
+        "SELECT image_url FROM role_images WHERE role_id = ?", (role_id,)
+    ) as cursor:
+        row = await cursor.fetchone()
+        if not row:
+            return None
+
+        return row["image_url"]
