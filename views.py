@@ -70,9 +70,6 @@ class PartyView(discord.ui.View):
 
                     self.party_service.update_party_start_time(self.party.uuid, minutes)
                     await interaction.response.defer()
-                    await interaction.edit_original_response(
-                        embed=create_embed(**self.party.generate_embed())
-                    )
 
                 return button_callback
 

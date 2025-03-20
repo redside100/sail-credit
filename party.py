@@ -231,7 +231,9 @@ class PartyService:
             )
             self.remove_party(party.uuid)
             party.start_time = None
+
             await message.edit(embed=create_embed(**party.generate_embed()), view=None)
+
             return
 
         # We can't start parties that aren't full.
