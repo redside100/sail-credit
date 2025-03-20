@@ -1,13 +1,14 @@
 from datetime import datetime, timedelta, timezone
 import functools
 import time
-from typing import Literal, Optional
+from typing import Literal, Optional, Tuple
 import discord
 from pytimeparse import parse as timeparse
 import db
 from quickchart import QuickChart
 from dateutil import parser
 from zoneinfo import ZoneInfo
+import re
 
 
 def user_command():
@@ -166,46 +167,64 @@ def get_last_reset_time():
     return int(now.replace(hour=8, minute=0, second=0, microsecond=0).timestamp())
 
 
-def get_scheduled_datetime_from_string(date_input: str) -> datetime:
+def convert_to_future_datetime(dt: datetime) -> datetime:
+    current_datetime = datetime.now(timezone.utc)
 
-    default_datetime = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
-    current_timestamp = int(time.time())
-    current_datetime = datetime.now(tz=timezone.utc)
-    # Parse the time using dateutil parser.
-    # Default timezone to EST if not included in the input string.
-    zone_est = ZoneInfo("US/Eastern")
-    zone_pst = ZoneInfo("US/Pacific")
-    try:
-        dt = parser.parse(
-            date_input,
-            tzinfos={
-                "EST": zone_est,
-                "PST": zone_pst,
-                None: zone_est,
-            },
-            fuzzy=True,
-        )
+    if dt >= current_datetime:
+        return dt
 
-        dt = dt.astimezone(timezone.utc)
-
-    except parser.ParserError:
-        return default_datetime
-
-    # If the parser interpretted it as a date in the past, add 12 hours, up to 2 times.
-    for _ in range(2):
-        if dt < current_datetime:
-            dt += timedelta(hours=12)
-
-    # If the date is still in the past, default.
-    if dt < current_datetime:
-        return default_datetime
-
-    # If the date is less than 10 seconds away, set it to 10 seconds away.
-    if int(dt.timestamp()) - current_timestamp < 10:
-        return current_datetime + timedelta(seconds=10)
-
-    # If the date is more than 12 hours away, set it to 12 hours away.
-    if int(dt.timestamp()) - current_timestamp > 3600 * 12:
-        return current_datetime + timedelta(hours=12)
+    # If this is a date in the past, add 24 hours
+    if dt <= current_datetime:
+        dt += timedelta(hours=24)
 
     return dt
+
+
+def get_scheduled_datetime_from_string(
+    date_input: str,
+) -> Tuple[Optional[datetime], Optional[str]]:
+    time_pattern = re.compile(
+        r"^\s*(\d{1,2}):?(\d{2})?\s*(am|pm|AM|PM)?\s*(est|EST|pst|PST)?\s*$"
+    )
+    match = time_pattern.match(date_input)
+
+    if not match:
+        return None, "Invalid time format. Please use a format like `8:00 am EST`."
+
+    groups = match.groups()
+    hour = int(groups[0])
+    minute = int(groups[1]) if groups[1] else 0
+    am_pm = groups[2].upper() if groups[2] else None
+    timezone = groups[3].upper() if groups[3] else "EST"
+
+    if hour < 1 or hour > 12:
+        return None, "Invalid hour. Please use a 12-hour format."
+
+    if minute and (minute < 0 or minute > 59):
+        return None, "Invalid minute. Please use a valid minute between 0 to 59."
+
+    dt_timezone = (
+        ZoneInfo("US/Eastern") if timezone == "EST" else ZoneInfo("US/Pacific")
+    )
+
+    dt = datetime.now(tz=dt_timezone).replace(
+        hour=hour, minute=minute, second=0, microsecond=0
+    )
+
+    if (
+        am_pm == "PM"
+        and dt.hour < 12
+        or (
+            am_pm is None
+            and dt + timedelta(days=1) - datetime.now(tz=dt_timezone)
+            > timedelta(hours=12)
+        )
+    ):
+        dt += timedelta(hours=12)
+
+    dt = convert_to_future_datetime(dt)
+
+    if dt - datetime.now(tz=dt_timezone) > timedelta(hours=12):
+        return None, "The time you entered is more than 12 hours in the future."
+
+    return convert_to_future_datetime(dt), None

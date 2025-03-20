@@ -36,7 +36,7 @@ party_service: Optional[PartyService] = None
     name="The name of the party (optional)",
     max_size="The max size of the party (default is 5)",
     description="Any additional information you want to provide about the party.",
-    start_time="The optional, initial scheduled time for the party to automatically start, recognized on a best effort basis. The recommended format is HH:MM [EST/PST]. Default timezone (if not provided) is EST.",
+    start_time="The initial time for the party to start. Format is HH:MM [AM/PM] [EST/PST]. Default timezone is EST.",
 )
 @user_command()
 async def create_party(
@@ -51,7 +51,18 @@ async def create_party(
 
     parsed_start_time = None
     if start_time:
-        parsed_start_time = get_scheduled_datetime_from_string(start_time)
+        parsed_start_time, time_parsing_error = get_scheduled_datetime_from_string(
+            start_time
+        )
+
+        if time_parsing_error:
+            await interaction.response.send_message(
+                embed=create_embed(
+                    message=f"There was a problem while parsing the start time: `{start_time}`.\n\n{time_parsing_error}",
+                ),
+                ephemeral=True,
+            )
+            return
 
     party: Party = party_service.create_party(
         user=interaction.user,
