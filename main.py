@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 import db
 from party import Party, PartyService
+import validators
 
 from util import (
     create_ssc_graph_url,
@@ -37,6 +38,7 @@ party_service: Optional[PartyService] = None
     max_size="The max size of the party (default is 5)",
     description="Any additional information you want to provide about the party.",
     start_time="The initial time for the party to start. Format is HH:MM [AM/PM] [EST/PST]. Default timezone is EST.",
+    image_url="The optional image URL for the party.",
 )
 @user_command()
 async def create_party(
@@ -46,6 +48,7 @@ async def create_party(
     max_size: Optional[int],
     description: Optional[str],
     start_time: Optional[str],
+    image_url: Optional[str],
 ):
     created_at = int(time.time())
 
@@ -64,7 +67,18 @@ async def create_party(
             )
             return
 
-    role_image_url = await db.get_role_image_url(role.id)
+    if image_url and not validators.url(image_url):
+        await interaction.response.send_message(
+            embed=create_embed(
+                message="That doesn't look like a valid image URL! Please try again."
+            ),
+            ephemeral=True,
+        )
+        return
+
+    if not image_url:
+        image_url = await db.get_role_image_url(role.id)
+
     party: Party = party_service.create_party(
         user=interaction.user,
         user_ssc=interaction.data["user_data"]["sail_credit"],
@@ -75,7 +89,7 @@ async def create_party(
         created_at=created_at,
         interaction=interaction,
         start_time=parsed_start_time,
-        role_image_url=role_image_url,
+        role_image_url=image_url,
     )
 
     content = f"<@{interaction.user.id}> has created a party for <@&{role.id}>!\n"
@@ -87,6 +101,7 @@ async def create_party(
         content=content,
         ephemeral=False,
         allowed_mentions=discord.AllowedMentions(),
+        embed=create_embed(**party.generate_embed()),
     )
 
     # Get the jump URL (message link) for the party for management commands
@@ -251,7 +266,7 @@ async def search(interaction: discord.Interaction, role: discord.Role):
 
 @bot.tree.command(
     name="link-image",
-    description="Link a party image to a role (or delete)",
+    description="Link a default party image to a role (or delete)",
 )
 @app_commands.describe(
     role="The discord role to link the image to.",
@@ -262,10 +277,12 @@ async def link_image(
     interaction: discord.Interaction, role: discord.Role, image_url: Optional[str]
 ):
 
-    # Admin check.
-    if not interaction.user.guild_permissions.administrator:
+    # Mod check.
+    if not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message(
-            embed=create_embed(message="You need admin priviliges to use this."),
+            embed=create_embed(
+                message="You need the **Manage Messages** permission to use this."
+            ),
             ephemeral=True,
         )
         return
@@ -279,22 +296,22 @@ async def link_image(
         )
         return
 
-    try:
+    if not validators.url(image_url):
         await interaction.response.send_message(
             embed=create_embed(
-                message=f"Linked image URL `{image_url}` to <@&{role.id}>.",
-                image_url=image_url,
-            ),
-        )
-        await db.update_role_image_url(role.id, image_url)
-
-    except discord.HTTPException:
-        await interaction.response.send_message(
-            embed=create_embed(
-                message="There was an error with the image URL, it might be malformed!",
+                message="That doesn't look like a valid URL! Please try again."
             ),
             ephemeral=True,
         )
+        return
+
+    await interaction.response.send_message(
+        embed=create_embed(
+            message=f"Linked image URL `{image_url}` to <@&{role.id}>.",
+            image_url=image_url,
+        ),
+    )
+    await db.update_role_image_url(role.id, image_url)
 
 
 @bot.tree.command(
