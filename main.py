@@ -377,9 +377,16 @@ async def conviction_log(
     interaction: discord.Interaction, user: Optional[discord.User] = None
 ):
 
-    user_id = interaction.user.id if not user else user.id
-    user_name = interaction.user.display_name if not user else user.display_name
-    conviction_log = await db.get_conviction_log(user_id)
+    title = (
+        f"Global Conviction Log"
+        if not user
+        else f"{user.display_name}'s Conviction Log"
+    )
+
+    if not user:
+        conviction_log = await db.get_conviction_log()
+    else:
+        conviction_log = await db.get_conviction_log(user.id)
 
     if not conviction_log:
         await interaction.response.send_message(
@@ -396,11 +403,7 @@ async def conviction_log(
         for log in chunk:
             page_contents.append(f"<t:{log['timestamp']}:f> **-** `{log['reason']}`")
 
-        pages.append(
-            create_embed(
-                title=f"{user_name}'s Convicition Log", message="\n".join(page_contents)
-            )
-        )
+        pages.append(create_embed(title=title, message="\n".join(page_contents)))
 
     await interaction.response.send_message(
         embed=pages[0], view=MessageBook(interaction.user.id, pages=pages)
