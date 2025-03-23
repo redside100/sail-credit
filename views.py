@@ -39,7 +39,9 @@ class PartyView(discord.ui.View):
         # Start, join, leave, cancel buttons
         start_button = discord.ui.Button(label="Start", style=discord.ButtonStyle.green)
         join_button = discord.ui.Button(label="Join", style=discord.ButtonStyle.blurple)
-        leave_button = discord.ui.Button(label="Leave", style=discord.ButtonStyle.red)
+        leave_button = discord.ui.Button(
+            label="Leave", style=discord.ButtonStyle.blurple
+        )
         cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.red)
 
         start_button.callback = self.start
@@ -48,13 +50,8 @@ class PartyView(discord.ui.View):
         cancel_button.callback = self.cancel
 
         self.add_item(start_button)
-
-        # Not scheduled if the job already ran and did not autostart.
-        # Leave out join/leave buttons
-        if scheduled:
-            self.add_item(join_button)
-            self.add_item(leave_button)
-
+        self.add_item(join_button)
+        self.add_item(leave_button)
         self.add_item(cancel_button)
 
         # Leave out time adjustment buttons if not scheduled.
@@ -70,6 +67,9 @@ class PartyView(discord.ui.View):
 
                     self.party_service.update_party_start_time(self.party.uuid, minutes)
                     await interaction.response.defer()
+                    await interaction.edit_original_response(
+                        embed=create_embed(**self.party.generate_embed())
+                    )
 
                 return button_callback
 
