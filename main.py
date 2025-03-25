@@ -401,7 +401,11 @@ async def conviction_log(
     for chunk in chunks:
         page_contents = []
         for log in chunk:
-            page_contents.append(f"<t:{log['timestamp']}:f> **-** `{log['reason']}`")
+            log_info = f"<t:{log['timestamp']}:f>"
+            # Global - include username here
+            if not user:
+                log_info += f" <@{log['discord_id']}>"
+            page_contents.append(f"{log_info} **-** `{log['reason']}`")
 
         pages.append(create_embed(title=title, message="\n".join(page_contents)))
 
