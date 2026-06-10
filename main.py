@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from discord import app_commands
 import discord
 from discord.ext import commands
+from casino.casino import CasinoPitboss
 import db
 from party import Party, PartyService
 import validators
@@ -413,11 +414,26 @@ async def conviction_log(
         embed=pages[0], view=MessageBook(interaction.user.id, pages=pages)
     )
 
+@bot.tree.command(
+    name="sscasino",
+    description="Gamble your SSC!",
+)
+@app_commands.describe(
+    game="The game to start a lobby for.",
+)
+@user_command()
+async def casino(
+    interaction: discord.Interaction, game: Literal["crash"]
+):
+    await casino_pitboss.start_lobby(game, interaction)
+    
 
 @bot.event
 async def on_ready():
     global party_service
     party_service = PartyService()
+    global casino_pitboss
+    casino_pitboss = CasinoPitboss()
     await bot.tree.sync()
 
     print("Ready!")
