@@ -20,6 +20,11 @@ def user_command():
     def wrapper(func):
         @functools.wraps(func)
         async def wrapped(interaction: discord.Interaction, *args, **kwargs):
+
+            if isinstance(interaction.channel, discord.channel.DMChannel):
+                await interaction.response.send_message("No command usage in DMs!")
+                return
+
             user_data = await db.get_user(interaction.user.id)
 
             if not user_data:
