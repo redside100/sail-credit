@@ -1,4 +1,5 @@
 import math
+from typing import List
 
 # Configuration
 COLS, ROWS = 40, 20
@@ -66,7 +67,19 @@ def render_dynamic_crash(current_return: float) -> list[str]:
     out.append(" " * 7 + "\u2514" + "\u2500" * W)
     return out
 
+def render_graph(current_return: float) -> str:
+    graph = render_dynamic_crash(current_return)
+    x_0 = math.floor(COLS * 1 / 4)
+    y_0 = math.floor(ROWS * 1 / 4)
 
+    display_return = "🚀 " + format(round(current_return, 3), ".2f") + "x"
+
+    graph[y_0] = (
+        graph[y_0][:x_0] + display_return + graph[y_0][x_0 + len(display_return) :]
+    )
+
+    return "\n".join(graph)
+    
 # Simulation loop
 def run_simulation(crash: float = 100.0):
     # Demonstrating the graph starting from 1.0 upwards. i = 0.01x

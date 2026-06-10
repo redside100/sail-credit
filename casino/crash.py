@@ -2,15 +2,15 @@ import asyncio
 from dataclasses import dataclass, field
 
 import discord
-
+import random
 from casino.casino import DegenerateGambler
+from casino.graph import render_graph
 from casino.models import CasinoGame
-from typing import Dict, List, Callable, Tuple
+from typing import Dict, List
 
-from casino.util import get_log_source
+from casino.util import get_crash_point, get_log_source
 import db
 from util import create_embed, user_interaction_callback
-
 @dataclass
 class CrashGameState:
     members: List[DegenerateGambler] = field(default_factory=list)
@@ -21,7 +21,7 @@ class CrashGameState:
 class CrashView(discord.ui.View):
     def __init__(self, crash: 'Crash'):
         super().__init__(timeout=None)
-        cash_out_button = discord.ui.Button(label="Cashout", style=discord.ButtonStyle.blurple)
+        cash_out_button = discord.ui.Button(label="Cash out", style=discord.ButtonStyle.green)
         cash_out_button.callback = self.cash_out
         self.add_item(cash_out_button)
         self.crash = crash
@@ -89,19 +89,37 @@ class Crash(CasinoGame):
         embed_contents = {"message": content, "title": self.name, "color": self.embed_details["color"] if not self.game_state.finished else discord.Colour(0xf54242)}
 
         return create_embed(**embed_contents)
+    
+    async def simulate(self):
+        
+        crash_point = get_crash_point()
+        ticks = 0
+        ticks_per_second = 10
+        tick_acceleration = 2 # 2 ticks for every cycle
+        view_initialized = False
+        while True:
+            ticks += ticks_per_second
+            self.game_state.current_multiplier = min(self.game_state.current_multiplier + ticks * 0.01, crash_point)
+            graph = render_graph(self.game_state.current_multiplier)
+            
+            if self.game_state.current_multiplier >= crash_point:
+                self.game_state.finished = True
+            
+            if not view_initialized:
+                await self.interaction.edit_original_response(embed=self.generate_embed(), content=f"```{graph}```", view=CrashView(self))
+            else:
+                await self.interaction.edit_original_response(embed=self.generate_embed(), content=f"```{graph}```")
+
+            if self.game_state.finished:
+                break
+
+            await asyncio.sleep(1.1)
+            ticks_per_second += tick_acceleration
 
     async def start(self, members: List[DegenerateGambler]) -> None:
         self.game_state.members = members
-        # No-op, just sleep 1s and refund bets
-        await self.interaction.edit_original_response(embed=self.generate_embed(), view=CrashView(self), content="Placeholder chart content")
-        for _ in range(10):
-            self.game_state.current_multiplier += 0.1
-            await asyncio.sleep(1.1)
-            await self.interaction.edit_original_response(embed=self.generate_embed())
-
-    
-        self.game_state.finished = True
-        await self.interaction.edit_original_response(embed=self.generate_embed(), content="Finished! Losers", view=None)
+        await self.simulate()
+        await self.interaction.edit_original_response(embed=self.generate_embed(), view=None)
         await self.finish()
     
     async def finish(self) -> None:
