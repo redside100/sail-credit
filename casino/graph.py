@@ -110,8 +110,9 @@ def render_dynamic_crash(current_return: float, crash: bool = False) -> list[str
         else:
             out.append(f"{'':>6s} │{line}")  # blank but same width
 
-    out.append(" " * 7 + "\u2514" + "\u2500" * (COLS + 5))
+    out.append(" " * 7 + "\u2514" + "\u2500" * (COLS + 10))
     return out
+
 
 def render_graph(current_return: float) -> str:
     graph = render_dynamic_crash(current_return)
@@ -125,7 +126,8 @@ def render_graph(current_return: float) -> str:
     )
 
     return "\n".join(graph)
-    
+
+
 # Simulation loop
 def run_simulation(crash: float = 100.0):
     for i in range(10000):
