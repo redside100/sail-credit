@@ -11,6 +11,7 @@ from typing import Dict, List
 from casino.util import get_crash_point, get_log_source
 import db
 from util import create_embed, user_interaction_callback
+import time
 @dataclass
 class CrashGameState:
     members: List[DegenerateGambler] = field(default_factory=list)
@@ -66,7 +67,7 @@ class Crash(CasinoGame):
         self.name = "🚀 Sail Crash"
         self.canonical_name = "CRASH"
         self.description = "Bet your SSC and cash out before the chart crashes!"
-        self.lobby_time = 30
+        self.lobby_time = 15
         self.embed_details = {
             "color": discord.Colour(0x59ff00),
             "image_url": "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailcrash.png"
@@ -75,13 +76,13 @@ class Crash(CasinoGame):
 
     def generate_embed(self):
         content = "Current multiplier at " if not self.game_state.finished else "Crashed at "
-        content += f"**{round(self.game_state.current_multiplier, 2)}x**\n\n"
+        content += f"**{format(round(self.game_state.current_multiplier, 3), '.2f')}x**\n\n"
         for member in sorted(self.game_state.members, key=lambda m: m.bet_amount, reverse=True):
             content += f"- <@{member.user_id}> **({member.bet_amount} SSC)**"
             cash_out_multi = self.game_state.cash_outs.get(member)
             if cash_out_multi is not None:
                 amount = int(cash_out_multi * member.bet_amount)
-                content += f" - Cash out at {round(cash_out_multi, 2)}x **({amount} SSC)**"
+                content += f" - Cash out at {format(round(cash_out_multi, 3), '.2f')}x **({amount} SSC)**"
             elif self.game_state.finished:
                 content += " - 🪦"
             content += "\n"
@@ -94,26 +95,29 @@ class Crash(CasinoGame):
         
         crash_point = get_crash_point()
         ticks = 0
-        ticks_per_second = 10
-        tick_acceleration = 2 # 2 ticks for every cycle
+        ticks_per_second = 2
+        tick_acceleration = 0.1 # 2 ticks for every cycle
         view_initialized = False
         while True:
-            ticks += ticks_per_second
+            ticks += int(ticks_per_second)
             self.game_state.current_multiplier = min(self.game_state.current_multiplier + ticks * 0.01, crash_point)
             graph = render_graph(self.game_state.current_multiplier)
             
             if self.game_state.current_multiplier >= crash_point:
                 self.game_state.finished = True
             
+            start_time = time.time()
             if not view_initialized:
                 await self.interaction.edit_original_response(embed=self.generate_embed(), content=f"```{graph}```", view=CrashView(self))
+                view_initialized = True
             else:
                 await self.interaction.edit_original_response(embed=self.generate_embed(), content=f"```{graph}```")
 
             if self.game_state.finished:
                 break
 
-            await asyncio.sleep(1.1)
+            sleep_time = max(0, 1.2 - (time.time() - start_time))
+            await asyncio.sleep(sleep_time)
             ticks_per_second += tick_acceleration
 
     async def start(self, members: List[DegenerateGambler]) -> None:
