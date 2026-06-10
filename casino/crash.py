@@ -150,7 +150,7 @@ class Crash(CasinoGame):
             
             crash_string = '📈' if crash_mult >= 2 else '📉'
             crash_string += ' ' + format(round(crash_mult, 3), ".2f") + 'x'
-            past_crash_mults.append(crash_string)
+            past_crash_mults.insert(0, crash_string)
 
         
         past_crash_line = "**Past crashes** " + ' | '.join(past_crash_mults)
