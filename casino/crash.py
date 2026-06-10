@@ -12,6 +12,8 @@ from casino.util import get_crash_point, get_log_source
 import db
 from util import create_embed, user_interaction_callback
 import time
+
+
 @dataclass
 class CrashGameState:
     members: List[DegenerateGambler] = field(default_factory=list)
@@ -19,14 +21,17 @@ class CrashGameState:
     finished: bool = False
     current_multiplier: float = 1
 
+
 class CrashView(discord.ui.View):
-    def __init__(self, crash: 'Crash'):
+    def __init__(self, crash: "Crash"):
         super().__init__(timeout=None)
-        cash_out_button = discord.ui.Button(label="Cash out", style=discord.ButtonStyle.green)
+        cash_out_button = discord.ui.Button(
+            label="Cash out", style=discord.ButtonStyle.green
+        )
         cash_out_button.callback = self.cash_out
         self.add_item(cash_out_button)
         self.crash = crash
-    
+
     @user_interaction_callback()
     async def cash_out(self, interaction: discord.Interaction):
         user_id = interaction.user.id
@@ -38,30 +43,39 @@ class CrashView(discord.ui.View):
         if not crash_member:
             await interaction.response.defer()
             return
-        
+
         if user_id in {member.user_id for member in self.crash.game_state.cash_outs}:
             await interaction.response.defer()
             return
-        
+
         if self.crash.game_state.finished:
             await interaction.response.defer()
             return
-        
 
-        self.crash.game_state.cash_outs[crash_member] = self.crash.game_state.current_multiplier
-        cash_out_amount = int(crash_member.bet_amount * self.crash.game_state.current_multiplier)
+        self.crash.game_state.cash_outs[crash_member] = (
+            self.crash.game_state.current_multiplier
+        )
+        cash_out_amount = int(
+            crash_member.bet_amount * self.crash.game_state.current_multiplier
+        )
 
-        user = interaction.data["user_data"] # pyright: ignore
+        user = interaction.data["user_data"]  # pyright: ignore
         source = source = get_log_source(self.crash.canonical_name, "DEBIT")
-        await db.change_and_log_sail_credit(user_id, -1, -1, -1, user["sail_credit"], user["sail_credit"] + cash_out_amount, source)
+        await db.change_and_log_sail_credit(
+            user_id,
+            -1,
+            -1,
+            -1,
+            user["sail_credit"],
+            user["sail_credit"] + cash_out_amount,
+            source,
+        )
 
         # Avoid sending messages to respect rate limits
         await interaction.response.defer()
 
 
 class Crash(CasinoGame):
-
-
     def __init__(self, interaction: discord.Interaction):
         super().__init__(interaction)
         self.name = "🚀 Sail Crash"
@@ -69,49 +83,69 @@ class Crash(CasinoGame):
         self.description = "Bet your SSC and cash out before the chart crashes!"
         self.lobby_time = 15
         self.embed_details = {
-            "color": discord.Colour(0x59ff00),
-            "image_url": "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailcrash.png"
+            "color": discord.Colour(0x59FF00),
+            "image_url": "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailcrash.png",
         }
         self.game_state = CrashGameState()
 
     def generate_embed(self):
-        content = "Current multiplier at " if not self.game_state.finished else "Crashed at "
-        content += f"**{format(round(self.game_state.current_multiplier, 3), '.2f')}x**\n\n"
-        for member in sorted(self.game_state.members, key=lambda m: m.bet_amount, reverse=True):
-            content += f"- <@{member.user_id}> **({member.bet_amount} SSC)**"
+        content = (
+            "Current multiplier at " if not self.game_state.finished else "Crashed at "
+        )
+        content += (
+            f"**{format(round(self.game_state.current_multiplier, 3), '.2f')}x**\n\n"
+        )
+        for member in sorted(
+            self.game_state.members, key=lambda m: m.bet_amount, reverse=True
+        ):
+            content += f"- <@{member.user_id}> ({member.bet_amount} SSC)"
             cash_out_multi = self.game_state.cash_outs.get(member)
             if cash_out_multi is not None:
                 amount = int(cash_out_multi * member.bet_amount)
-                content += f" - Cash out at {format(round(cash_out_multi, 3), '.2f')}x **({amount} SSC)**"
+                content = f"- <@{member.user_id}> (+{amount} SSC) 🎉 Cashed out at **{format(round(cash_out_multi, 3), '.2f')}x**"
             elif self.game_state.finished:
-                content += " - 🪦"
+                content = f"- <@{member.user_id}> (-{member.bet_amount} SSC) 🪦"
             content += "\n"
 
-        embed_contents = {"message": content, "title": self.name, "color": self.embed_details["color"] if not self.game_state.finished else discord.Colour(0xf54242)}
+        embed_contents = {
+            "message": content,
+            "title": self.name,
+            "color": self.embed_details["color"]
+            if not self.game_state.finished
+            else discord.Colour(0xF54242),
+        }
 
         return create_embed(**embed_contents)
-    
+
     async def simulate(self):
-        
+
         crash_point = get_crash_point()
         ticks = 0
         ticks_per_second = 2
-        tick_acceleration = 0.1 # 2 ticks for every cycle
+        tick_acceleration = 0.1  # 2 ticks for every cycle
         view_initialized = False
         while True:
             ticks += int(ticks_per_second)
-            self.game_state.current_multiplier = min(self.game_state.current_multiplier + ticks * 0.01, crash_point)
+            self.game_state.current_multiplier = min(
+                self.game_state.current_multiplier + ticks * 0.01, crash_point
+            )
             graph = render_graph(self.game_state.current_multiplier)
-            
+
             if self.game_state.current_multiplier >= crash_point:
                 self.game_state.finished = True
-            
+
             start_time = time.time()
             if not view_initialized:
-                await self.interaction.edit_original_response(embed=self.generate_embed(), content=f"```{graph}```", view=CrashView(self))
+                await self.interaction.edit_original_response(
+                    embed=self.generate_embed(),
+                    content=f"```{graph}```",
+                    view=CrashView(self),
+                )
                 view_initialized = True
             else:
-                await self.interaction.edit_original_response(embed=self.generate_embed(), content=f"```{graph}```")
+                await self.interaction.edit_original_response(
+                    embed=self.generate_embed(), content=f"```{graph}```"
+                )
 
             if self.game_state.finished:
                 break
@@ -123,9 +157,11 @@ class Crash(CasinoGame):
     async def start(self, members: List[DegenerateGambler]) -> None:
         self.game_state.members = members
         await self.simulate()
-        await self.interaction.edit_original_response(embed=self.generate_embed(), view=None)
+        await self.interaction.edit_original_response(
+            embed=self.generate_embed(), view=None
+        )
         await self.finish()
-    
+
     async def finish(self) -> None:
         if self.finish_callback:
             await self.finish_callback()
