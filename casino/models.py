@@ -11,6 +11,9 @@ class DegenerateGambler:
     user_id: int
     bet_amount: int
 
+    def __hash__(self):
+        return self.user_id
+
 class CasinoGame(ABC):
     interaction: discord.Interaction
     name: str

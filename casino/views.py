@@ -51,7 +51,6 @@ class CasinoLobbyView(discord.ui.View):
     def __init__(self, lobby: 'CasinoLobby'):
         super().__init__(timeout=lobby.game.lobby_time)
         self.lobby = lobby
-        # Start, join, leave, cancel buttons
         play_button = discord.ui.Button(label="Play", style=discord.ButtonStyle.blurple)
         play_button.callback = self.play
         self.add_item(play_button)
