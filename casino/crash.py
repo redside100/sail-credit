@@ -25,12 +25,10 @@ class CrashGameState:
         return {
             "members": [member.user_id for member in self.members],
             "cash_outs": {
-                dg.user_id: {
-                    "bet_amount": dg.bet_amount,
-                    "multiplier": mul
-                } for dg, mul in self.cash_outs.items()
+                dg.user_id: {"bet_amount": dg.bet_amount, "multiplier": mul}
+                for dg, mul in self.cash_outs.items()
             },
-            "crash_multiplier": self.current_multiplier
+            "crash_multiplier": self.current_multiplier,
         }
 
 
@@ -64,9 +62,9 @@ class CrashView(discord.ui.View):
             await interaction.response.defer()
             return
 
-        self.crash.game_state.cash_outs[crash_member] = (
-            self.crash.game_state.current_multiplier
-        )
+        self.crash.game_state.cash_outs[
+            crash_member
+        ] = self.crash.game_state.current_multiplier
         cash_out_amount = int(
             crash_member.bet_amount * self.crash.game_state.current_multiplier
         )
@@ -137,7 +135,7 @@ class Crash(CasinoGame):
         ticks_per_second = 2
         tick_acceleration = 0.1  # 2 ticks for every cycle
         view_initialized = False
-        
+
         past_crashes = await db.get_casino_lobby_logs(self.canonical_name, limit=10)
         past_crash_mults = []
         for log in past_crashes:
@@ -147,13 +145,12 @@ class Crash(CasinoGame):
             crash_mult = json.loads(metadata.decode()).get("crash_multiplier")
             if not crash_mult:
                 continue
-            
-            crash_string = '📈' if crash_mult >= 2 else '📉'
-            crash_string += ' ' + format(round(crash_mult, 3), ".2f") + 'x'
-            past_crash_mults.insert(0, crash_string)
 
-        
-        past_crash_line = "**Past crashes** " + ' | '.join(past_crash_mults)
+            crash_string = "📈" if crash_mult >= 2 else "📉"
+            crash_string += " " + format(round(crash_mult, 3), ".2f") + "x"
+            past_crash_mults.append(crash_string)
+
+        past_crash_line = "**Past crashes** " + " | ".join(past_crash_mults)
         while True:
             ticks += int(ticks_per_second)
             self.game_state.current_multiplier = min(
@@ -162,7 +159,9 @@ class Crash(CasinoGame):
 
             if self.game_state.current_multiplier >= crash_point:
                 self.game_state.finished = True
-            graph = render_graph(self.game_state.current_multiplier, self.game_state.finished)
+            graph = render_graph(
+                self.game_state.current_multiplier, self.game_state.finished
+            )
 
             content = f"# {self.name}\n{past_crash_line}\n```{graph}```"
             start_time = time.time()
