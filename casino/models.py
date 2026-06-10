@@ -33,3 +33,7 @@ class CasinoGame(ABC):
     @abstractmethod
     async def finish(self):
         pass
+
+    @abstractmethod
+    def get_metadata(self) -> Dict:
+        pass

@@ -1,5 +1,6 @@
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+import json
 
 import discord
 from casino.casino import DegenerateGambler
@@ -19,6 +20,18 @@ class CrashGameState:
     cash_outs: Dict[DegenerateGambler, float] = field(default_factory=dict)
     finished: bool = False
     current_multiplier: float = 1
+
+    def to_dict(self):
+        return {
+            "members": [member.user_id for member in self.members],
+            "cash_outs": {
+                dg.user_id: {
+                    "bet_amount": dg.bet_amount,
+                    "multiplier": mul
+                } for dg, mul in self.cash_outs.items()
+            },
+            "crash_multiplier": self.current_multiplier
+        }
 
 
 class CrashView(discord.ui.View):
@@ -97,14 +110,15 @@ class Crash(CasinoGame):
         for member in sorted(
             self.game_state.members, key=lambda m: m.bet_amount, reverse=True
         ):
-            content += f"- <@{member.user_id}> ({member.bet_amount} SSC)"
+            entry = f"- <@{member.user_id}> ({member.bet_amount} SSC)"
             cash_out_multi = self.game_state.cash_outs.get(member)
             if cash_out_multi is not None:
                 amount = int(cash_out_multi * member.bet_amount)
-                content = f"- <@{member.user_id}> (+{amount} SSC) 🎉 Cashed out at **{format(round(cash_out_multi, 3), '.2f')}x**"
+                entry = f"- <@{member.user_id}> **(+{amount} SSC)** 🎉 Cashed out at **{format(round(cash_out_multi, 3), '.2f')}x**"
             elif self.game_state.finished:
-                content = f"- <@{member.user_id}> (-{member.bet_amount} SSC) 🪦"
-            content += "\n"
+                entry = f"- <@{member.user_id}> **(-{member.bet_amount} SSC)** 🪦"
+
+            content += f"{entry}\n"
 
         embed_contents = {
             "message": content,
@@ -123,27 +137,45 @@ class Crash(CasinoGame):
         ticks_per_second = 2
         tick_acceleration = 0.1  # 2 ticks for every cycle
         view_initialized = False
+        
+        past_crashes = await db.get_casino_lobby_logs(self.canonical_name, limit=10)
+        past_crash_mults = []
+        for log in past_crashes:
+            metadata = log.get("metadata")
+            if not metadata:
+                continue
+            crash_mult = json.loads(metadata.decode()).get("crash_multiplier")
+            if not crash_mult:
+                continue
+            
+            crash_string = '📈' if crash_mult >= 2 else '📉'
+            crash_string += ' ' + format(round(crash_mult, 3), ".2f") + 'x'
+            past_crash_mults.append(crash_string)
+
+        
+        past_crash_line = "**Past crashes** " + ' | '.join(past_crash_mults)
         while True:
             ticks += int(ticks_per_second)
             self.game_state.current_multiplier = min(
                 self.game_state.current_multiplier + ticks * 0.01, crash_point
             )
-            graph = render_graph(self.game_state.current_multiplier)
 
             if self.game_state.current_multiplier >= crash_point:
                 self.game_state.finished = True
+            graph = render_graph(self.game_state.current_multiplier, self.game_state.finished)
 
+            content = f"# {self.name}\n{past_crash_line}\n```{graph}```"
             start_time = time.time()
             if not view_initialized:
                 await self.interaction.edit_original_response(
                     embed=self.generate_embed(),
-                    content=f"```{graph}```",
+                    content=content,
                     view=CrashView(self),
                 )
                 view_initialized = True
             else:
                 await self.interaction.edit_original_response(
-                    embed=self.generate_embed(), content=f"```{graph}```"
+                    embed=self.generate_embed(), content=content
                 )
 
             if self.game_state.finished:
@@ -164,3 +196,6 @@ class Crash(CasinoGame):
     async def finish(self) -> None:
         if self.finish_callback:
             await self.finish_callback()
+
+    def get_metadata(self) -> Dict:
+        return self.game_state.to_dict()

@@ -54,3 +54,12 @@ ALTER TABLE `sail_credit_log_tmp`
 RENAME TO `sail_credit_log`;
 
 COMMIT;
+
+CREATE TABLE
+    IF NOT EXISTS `casino_lobby_log` (
+        `uuid` TEXT PRIMARY KEY,
+        `start_time` INTEGER,
+        `end_time` INTEGER,
+        `metadata` BLOB,
+        `game` TEXT
+    )

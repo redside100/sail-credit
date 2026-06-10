@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Literal, Optional
 import aiosqlite
 
 import party
+import json
 
 db = None
 
@@ -175,3 +176,16 @@ async def get_role_image_url(role_id: int) -> Optional[str]:
             return None
 
         return row["image_url"]
+
+async def create_casino_lobby_log(uuid: str, start_time: int, end_time: int, metadata: Dict[str, Any], game: str):
+    await db.execute(
+        "INSERT INTO casino_lobby_log VALUES (?, ?, ?, ?, ?)", (uuid, start_time, end_time, json.dumps(metadata).encode(), game)
+    )
+    await db.commit()
+
+async def get_casino_lobby_logs(game: str, limit: int = 10) -> Dict:
+    async with db.execute(
+        "SELECT * FROM casino_lobby_log WHERE game = ? LIMIT ?", (game, limit)
+    ) as cursor:
+        rows = await cursor.fetchall()
+        return rows

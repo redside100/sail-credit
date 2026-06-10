@@ -1,7 +1,7 @@
 import math
 
 # Configuration
-COLS, ROWS = 80, 20
+COLS, ROWS = 40, 20
 W, H = COLS * 2, ROWS * 4
 B = 0x2800
 
@@ -39,7 +39,7 @@ def format_label(value: float) -> str:
     return f"{int(round(value)):>5d}x"
 
 
-def render_dynamic_crash(current_return: float, crash: bool = False) -> list[str]:
+def render_dynamic_crash(current_return: float) -> list[str]:
     buf = [0.0] * (W * H)
     y_min, y_max = 1.0, max(2.0, current_return)
 
@@ -113,12 +113,16 @@ def render_dynamic_crash(current_return: float, crash: bool = False) -> list[str
     return out
 
 
-def render_graph(current_return: float) -> str:
+def render_graph(current_return: float, crashed: bool) -> str:
     graph = render_dynamic_crash(current_return)
     x_0 = math.floor(COLS * 1 / 4)
     y_0 = math.floor(ROWS * 1 / 4)
 
-    display_return = "🚀 " + format(round(current_return, 3), ".2f") + "x"
+    emoji = "🚀"
+    if crashed:
+        emoji = "🪦"
+
+    display_return = emoji + " " + format(round(current_return, 3), ".2f") + "x"
 
     graph[y_0] = (
         graph[y_0][:x_0] + display_return + graph[y_0][x_0 + len(display_return) :]
@@ -131,7 +135,7 @@ def render_graph(current_return: float) -> str:
 def run_simulation(crash: float = 100.0):
     for i in range(10000):
         current_return = 1.0 + (i * 0.01)
-        graph = render_dynamic_crash(current_return, crash=(current_return == crash))
+        graph = render_dynamic_crash(current_return)
 
         x_0 = max(10, math.floor(COLS * 1 / 4))
         y_0 = math.floor(ROWS * 1 / 4)

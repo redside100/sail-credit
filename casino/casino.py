@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Literal, Optional
 import uuid
 from casino.models import CasinoGame, CasinoGameAlias, DegenerateGambler
 from casino.views import CasinoLobbyView
+import db
 from util import create_embed
 import time
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -95,3 +96,6 @@ class CasinoPitboss:
     async def finish_lobby(self, lobby: CasinoLobby):
         if lobby in self.lobbies:
             self.lobbies.remove(lobby)
+        
+        end_time = int(time.time())
+        await db.create_casino_lobby_log(str(lobby.uuid), lobby.start_time, end_time, lobby.game.get_metadata(), lobby.game.canonical_name)
