@@ -1,5 +1,4 @@
 import math
-from typing import List
 
 # Configuration
 COLS, ROWS = 80, 20

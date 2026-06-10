@@ -2,7 +2,6 @@ import asyncio
 from dataclasses import dataclass, field
 
 import discord
-import random
 from casino.casino import DegenerateGambler
 from casino.graph import render_graph
 from casino.models import CasinoGame
