@@ -82,7 +82,7 @@ async def change_and_log_sail_credit(
     party_finished_at: int,
     old_ssc: int,
     new_ssc: int,
-    source: str,
+    source: str = "PARTY",
     timestamp: Optional[int] = None,
 ) -> None:
     if not timestamp:
