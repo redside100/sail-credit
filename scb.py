@@ -161,7 +161,7 @@ class SailCreditBureau:
         user = await db.get_user(user_id)
         last_reset_timestamp = get_last_reset_time()
         history = await db.get_user_sail_credit_log(
-            user_id, last_reset_timestamp, exclude_admin=True
+            user_id, last_reset_timestamp, source="PARTY"
         )
         reward = await self.credit(
             user_id, user["sail_credit"], len(history), party.size
@@ -197,7 +197,7 @@ class SailCreditBureau:
         days_flaked = set()
         start_timestamp = int(time.time()) - self.FLAKE_WINDOW
         history = await db.get_user_sail_credit_log(
-            user_id, start_timestamp, exclude_admin=True
+            user_id, start_timestamp, source="PARTY"
         )
         for entry in history:
             if entry["new_sail_credit"] - entry["prev_sail_credit"] < 0:
