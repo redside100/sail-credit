@@ -17,7 +17,7 @@ def dict_factory(cursor, row):
 
 async def init():
     global db
-    db = await aiosqlite.connect("sail_credit.db")
+    db = await aiosqlite.connect("sail_credit.db", timeout=5)
     db.row_factory = dict_factory
 
 
