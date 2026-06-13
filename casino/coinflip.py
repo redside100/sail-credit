@@ -87,6 +87,7 @@ class Coinflip(CasinoGame):
             back_label=back_label,
             result="front" if label_map[winner.choice] == front_label else "back",
             total_ms=wait_time_ms,
+            size=192,
         )
 
         description = ""
