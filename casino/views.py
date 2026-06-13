@@ -1,3 +1,4 @@
+from functools import partial
 from typing import TYPE_CHECKING, Callable
 
 import discord
@@ -54,30 +55,67 @@ class BetModal(discord.ui.Modal):
 
 
 class CasinoLobbyView(discord.ui.View):
-
     def __init__(self, lobby: "CasinoLobby"):
         super().__init__(timeout=lobby.game.lobby_time)
         self.lobby = lobby
-        bet_button = discord.ui.Button(
-            label="Place bet", style=discord.ButtonStyle.blurple
+
+        if lobby.game.bet_config.bet_type == "freeform":
+            bet_button = discord.ui.Button(
+                label="Place bet", style=discord.ButtonStyle.blurple
+            )
+            bet_10_button = discord.ui.Button(
+                label="10", style=discord.ButtonStyle.green
+            )
+            bet_100_button = discord.ui.Button(
+                label="100", style=discord.ButtonStyle.green
+            )
+            bet_250_button = discord.ui.Button(
+                label="250", style=discord.ButtonStyle.green
+            )
+            bet_button.callback = self.place_bet
+            bet_10_button.callback = self.bet_10
+            bet_100_button.callback = self.bet_100
+            bet_250_button.callback = self.bet_250
+            self.add_item(bet_button)
+            self.add_item(bet_10_button)
+            self.add_item(bet_100_button)
+            self.add_item(bet_250_button)
+        elif (
+            lobby.game.bet_config.bet_type == "fixed"
+            and lobby.game.bet_config.fixed_bet_amount
+        ):
+            fixed_bet_button = discord.ui.Button(
+                label=f"Join ({lobby.game.bet_config.fixed_bet_amount} SSC)",
+                style=discord.ButtonStyle.blurple,
+            )
+            fixed_bet_button.callback = self.fixed_bet
+            self.add_item(fixed_bet_button)
+
+    @user_interaction_callback()
+    async def fixed_bet(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        for member in self.lobby.members:
+            if member.user_id == user_id:
+                await interaction.response.defer()
+                return
+
+        await self.bet(
+            interaction,
+            self.lobby.game.bet_config.fixed_bet_amount,
+            interaction.data["user_data"]["sail_credit"],
         )
-        bet_10_button = discord.ui.Button(label="10", style=discord.ButtonStyle.green)
-        bet_100_button = discord.ui.Button(label="100", style=discord.ButtonStyle.green)
-        bet_250_button = discord.ui.Button(label="250", style=discord.ButtonStyle.green)
-        bet_button.callback = self.place_bet
-        bet_10_button.callback = self.bet_10
-        bet_100_button.callback = self.bet_100
-        bet_250_button.callback = self.bet_250
-        self.add_item(bet_button)
-        self.add_item(bet_10_button)
-        self.add_item(bet_100_button)
-        self.add_item(bet_250_button)
 
     async def bet(
         self, interaction: discord.Interaction, bet_amount: int, old_ssc: int
     ):
         user_id = interaction.user.id
         if self.lobby.started:
+            return
+
+        if self.lobby.max_size and len(self.lobby.members) >= self.lobby.max_size:
+            await interaction.response.send_message(
+                "This lobby is full!", ephemeral=True
+            )
             return
 
         if old_ssc < bet_amount:
@@ -100,7 +138,11 @@ class CasinoLobbyView(discord.ui.View):
         if casino_member:
             casino_member.bet_amount += bet_amount
         else:
-            self.lobby.members.append(DegenerateGambler(user_id, bet_amount))
+            self.lobby.members.append(
+                DegenerateGambler(
+                    user_id, bet_amount, interaction.user.display_avatar.url
+                )
+            )
 
         await interaction.response.edit_message(embed=self.lobby.generate_embed())
 
