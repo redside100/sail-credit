@@ -61,8 +61,17 @@ class CasinoLobbyView(discord.ui.View):
         bet_button = discord.ui.Button(
             label="Place bet", style=discord.ButtonStyle.blurple
         )
+        bet_10_button = discord.ui.Button(label="10", style=discord.ButtonStyle.green)
+        bet_100_button = discord.ui.Button(label="100", style=discord.ButtonStyle.green)
+        bet_250_button = discord.ui.Button(label="250", style=discord.ButtonStyle.green)
         bet_button.callback = self.place_bet
+        bet_10_button.callback = self.bet_10
+        bet_100_button.callback = self.bet_100
+        bet_250_button.callback = self.bet_250
         self.add_item(bet_button)
+        self.add_item(bet_10_button)
+        self.add_item(bet_100_button)
+        self.add_item(bet_250_button)
 
     async def bet(
         self, interaction: discord.Interaction, bet_amount: int, old_ssc: int
@@ -115,5 +124,5 @@ class CasinoLobbyView(discord.ui.View):
     async def bet_100(self, interaction: discord.Interaction):
         await self.bet(interaction, 100, interaction.data["user_data"]["sail_credit"])
 
-    async def bet_500(self, interaction: discord.Interaction):
-        await self.bet(interaction, 500, interaction.data["user_data"]["sail_credit"])
+    async def bet_250(self, interaction: discord.Interaction):
+        await self.bet(interaction, 250, interaction.data["user_data"]["sail_credit"])
