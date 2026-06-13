@@ -66,13 +66,16 @@ async def get_user_sail_credit_log(
     discord_id: int, start_timestamp: int, source: Optional[str] = "PARTY"
 ) -> List[Dict[str, Any]]:
 
+    source_clause = ""
     if source:
         source_clause = "AND source = ?"
     async with db.execute(
         f"SELECT * FROM sail_credit_log WHERE discord_id = ? AND timestamp > ? {source_clause} ORDER BY timestamp DESC",
-        (discord_id, start_timestamp)
-        if not source
-        else (discord_id, start_timestamp, source),
+        (
+            (discord_id, start_timestamp)
+            if not source
+            else (discord_id, start_timestamp, source)
+        ),
     ) as cursor:
         rows = await cursor.fetchall()
         return rows
