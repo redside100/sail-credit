@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass, field
 import io
 import random
+from turtle import back
 
 import discord
 from casino.flip_generator import create_coinflip_gif
@@ -58,7 +59,7 @@ class Coinflip(CasinoGame):
         self.canonical_name = "COINFLIP"
 
         self.game_state = CoinFlipGameState()
-        self.description = f"Join a 1v1 coinflip against <@{interaction.user.id}> ({host_choice})!\n\nThe winner receives **{int(host_bet * self.game_state.win_multiplier)} SSC**."
+        self.description = f"Join a 1v1 coinflip against <@{interaction.user.id}>!\n\nThe winner receives **{int(host_bet * self.game_state.win_multiplier)} SSC**."
         self.bet_config = BetConfig(bet_type="fixed", fixed_bet_amount=host_bet)
         self.lobby_time = 15
         self.embed_details = {
@@ -70,11 +71,22 @@ class Coinflip(CasinoGame):
 
     async def flip(self):
 
+        winner = random.choice(self.game_state.members)
+        loser = [m for m in self.game_state.members if m.user_id != winner.user_id][0]
+        self.game_state.outcome = winner.choice
+        win_amount = int(winner.bet_amount * self.game_state.win_multiplier)
+
+        wait_time_ms = 3000
+        label_map = {"heads": "H", "tails": "T"}
+        front_label = label_map[self.game_state.members[0].choice]
+        back_label = label_map[self.game_state.members[1].choice]
         gif_bytes = await create_coinflip_gif(
             self.game_state.members[0].avatar_url,
             self.game_state.members[1].avatar_url,
-            front_label="H" if self.game_state.members[0].choice == "heads" else "T",
-            back_label="H" if self.game_state.members[1].choice == "tails" else "T",
+            front_label=front_label,
+            back_label=back_label,
+            result="front" if label_map[winner.choice] == front_label else "back",
+            total_ms=wait_time_ms,
         )
 
         description = ""
@@ -82,7 +94,7 @@ class Coinflip(CasinoGame):
             description += f"- <@{member.user_id}> **({member.bet_amount} SSC)** **({member.choice})**\n"
 
         await self.interaction.edit_original_response(
-            attachments=[discord.File(io.BytesIO(gif_bytes), filename="coinflip.gif")],
+            attachments=[discord.File(gif_bytes, filename="coinflip.gif")],
             embed=create_embed(
                 description,
                 "Flipping...",
@@ -92,12 +104,7 @@ class Coinflip(CasinoGame):
             view=None,
         )
 
-        await asyncio.sleep(3)
-
-        winner = random.choice(self.game_state.members)
-        loser = [m for m in self.game_state.members if m.user_id != winner.user_id][0]
-        self.game_state.outcome = winner.choice
-        win_amount = int(winner.bet_amount * self.game_state.win_multiplier)
+        await asyncio.sleep(wait_time_ms / 1000)
 
         winner_data = await db.get_user(winner.user_id)
         ssc = winner_data["sail_credit"]
@@ -133,7 +140,7 @@ class Coinflip(CasinoGame):
             )
             return
 
-        opponent_choice = "heads" if self.host_choice == "tails" else "heads"
+        opponent_choice = "heads" if self.host_choice == "tails" else "tails"
         self.game_state.members = [
             CoinFlipGambler(
                 user_id=members[0].user_id,
