@@ -240,3 +240,10 @@ def get_scheduled_datetime_from_string(
         return None, "The time you entered is more than 12 hours in the future."
 
     return convert_to_future_datetime(dt), None
+
+
+def get_balance(interaction: discord.Interaction) -> int:
+    """
+    Centralize this call so we don't need to keep adding pyright: ignores.
+    """
+    return interaction.data["user_data"]["sail_credit"]  # pyright: ignore
