@@ -9,6 +9,7 @@ from casino.casino import CasinoPitboss
 import db
 from party import Party, PartyService
 import validators
+from datetime import datetime, timezone, timedelta
 
 from util import (
     create_ssc_graph_url,
@@ -427,6 +428,33 @@ async def casino(
 ):
     await casino_pitboss.start_lobby(game, interaction)
     
+    
+@bot.tree.command(
+    name="daily",
+    description="Claim your daily SSC!",
+)
+@user_command()
+async def daily_ssc(
+    interaction: discord.Interaction
+):
+    DAILY_SSC_AMOUNT = 10
+    user_id = interaction.user.id
+
+    # Daily reset at 8:00 AM EST.
+    est = timezone(timedelta(hours=-5))
+    yesterday_8am_est = datetime.now(est).replace(hour=8, minute=0, second=0, microsecond=0) - timedelta(days=1)
+
+    user_info = await db.get_user_sail_credit_log(user_id, yesterday_8am_est.timestamp(), source="DAILY_SSC")
+    if not user_info:
+        current_ssc = interaction.data['user_data']["sail_credit"]
+        await db.change_and_log_sail_credit(user_id, -1, -1, -1, current_ssc, current_ssc + DAILY_SSC_AMOUNT, "DAILY_SSC")
+        await interaction.response.send_message(
+            embed=create_embed(message=f"Daily reward of {DAILY_SSC_AMOUNT} SSC claimed. Your balance is now **{current_ssc + DAILY_SSC_AMOUNT} SSC**."),
+        )
+    else:
+        await interaction.response.send_message(
+            embed=create_embed(message="You've already claimed your daily reward today. Why don't you try starting a **party?**"),
+        )
 
 @bot.event
 async def on_ready():
