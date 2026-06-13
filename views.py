@@ -636,10 +636,10 @@ class TopupView(discord.ui.View):
             await interaction.response.send_message("Insufficient SSC.", ephemeral=True)
             return False
 
+        acquiring_user_data = await db.get_user(self.acquiring_user_id)
         await db.change_and_log_sail_credit(
             user_id, -1, -1, -1, user_balance, user_balance - amount, "DONATION_DEBIT"
         )
-        acquiring_user_data = await db.get_user(self.acquiring_user_id)
         acquiring_user_balance = acquiring_user_data["sail_credit"]  # pyright: ignore
         await db.change_and_log_sail_credit(
             self.acquiring_user_id,
@@ -662,20 +662,27 @@ class TopupView(discord.ui.View):
     async def topup_10(self, interaction: discord.Interaction, _):
 
         if await self.topup(interaction, 10):
-            await interaction.edit_original_response(
+            await interaction.response.edit_message(
                 embed=create_embed(title="Donors", message=self.generate_embed())
             )
+            return
+        print("what")
+        await interaction.response.defer()
 
     @discord.ui.button(label="100", style=discord.ButtonStyle.blurple)
     async def topup_100(self, interaction: discord.Interaction, _):
         if await self.topup(interaction, 100):
-            await interaction.edit_original_response(
+            await interaction.response.edit_message(
                 embed=create_embed(title="Donors", message=self.generate_embed())
             )
+            return
+        await interaction.response.defer()
 
     @discord.ui.button(label="250", style=discord.ButtonStyle.blurple)
     async def topup_250(self, interaction: discord.Interaction, _):
         if await self.topup(interaction, 250):
-            await interaction.edit_original_response(
+            await interaction.response.edit_message(
                 embed=create_embed(title="Donors", message=self.generate_embed())
             )
+            return
+        await interaction.response.defer()
