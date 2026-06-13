@@ -1,7 +1,10 @@
+import asyncio
 from dataclasses import dataclass, field
+import io
 import random
 
 import discord
+from casino.flip_generator import create_coinflip_gif
 from casino.models import BetConfig, CasinoGame, DegenerateGambler
 from typing import Dict, List, Literal, Optional
 
@@ -66,6 +69,31 @@ class Coinflip(CasinoGame):
         self.max_size = 2
 
     async def flip(self):
+
+        gif_bytes = await create_coinflip_gif(
+            self.game_state.members[0].avatar_url,
+            self.game_state.members[1].avatar_url,
+            front_label="H" if self.game_state.members[0].choice == "heads" else "T",
+            back_label="H" if self.game_state.members[1].choice == "tails" else "T",
+        )
+
+        description = ""
+        for member in self.game_state.members:
+            description += f"- <@{member.user_id}> **({member.bet_amount} SSC)** **({member.choice})**\n"
+
+        await self.interaction.edit_original_response(
+            attachments=[discord.File(io.BytesIO(gif_bytes), filename="coinflip.gif")],
+            embed=create_embed(
+                description,
+                "Flipping...",
+                image_url="attachment://coinflip.gif",
+                color=self.embed_details["color"],
+            ),
+            view=None,
+        )
+
+        await asyncio.sleep(3)
+
         winner = random.choice(self.game_state.members)
         loser = [m for m in self.game_state.members if m.user_id != winner.user_id][0]
         self.game_state.outcome = winner.choice
@@ -81,10 +109,11 @@ class Coinflip(CasinoGame):
             embed=create_embed(
                 f"<@{winner.user_id}> wins! **(+{win_amount} SSC)**\n\nBetter luck next time, <@{loser.user_id}>.",
                 f"{winner.choice.capitalize()}!",
-                image_url=(
-                    self.HEADS_URL if winner.choice == "heads" else self.TAILS_URL
-                ),
-            )
+                image_url=winner.avatar_url,
+                color=self.embed_details["color"],
+            ),
+            view=None,
+            attachments=[],
         )
 
     async def start(self, members: List[DegenerateGambler]) -> None:
@@ -110,11 +139,13 @@ class Coinflip(CasinoGame):
                 user_id=members[0].user_id,
                 bet_amount=members[0].bet_amount,
                 choice=self.host_choice,
+                avatar_url=members[0].avatar_url,
             ),
             CoinFlipGambler(
                 user_id=members[1].user_id,
                 bet_amount=members[1].bet_amount,
                 choice=opponent_choice,
+                avatar_url=members[1].avatar_url,
             ),
         ]
 

@@ -11,6 +11,7 @@ CasinoGameAlias = Literal["crash"]
 class DegenerateGambler:
     user_id: int
     bet_amount: int
+    avatar_url: str
 
     def __hash__(self):
         return self.user_id

@@ -454,7 +454,11 @@ async def casino_coinflip(
     )
 
     def on_lobby_create(lobby: CasinoLobby):
-        lobby.members.append(DegenerateGambler(interaction.user.id, amount))
+        lobby.members.append(
+            DegenerateGambler(
+                interaction.user.id, amount, interaction.user.display_avatar.url
+            )
+        )
 
     await casino_pitboss.start_lobby(
         "coinflip", interaction, on_lobby_create, host_bet=amount, host_choice=choice

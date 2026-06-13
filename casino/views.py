@@ -138,7 +138,11 @@ class CasinoLobbyView(discord.ui.View):
         if casino_member:
             casino_member.bet_amount += bet_amount
         else:
-            self.lobby.members.append(DegenerateGambler(user_id, bet_amount))
+            self.lobby.members.append(
+                DegenerateGambler(
+                    user_id, bet_amount, interaction.user.display_avatar.url
+                )
+            )
 
         await interaction.response.edit_message(embed=self.lobby.generate_embed())
 
