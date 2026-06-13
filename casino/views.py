@@ -118,6 +118,28 @@ class CasinoLobbyView(discord.ui.View):
             )
             return
 
+        existing_bet = 0
+        casino_member = None
+        for member in self.lobby.members:
+            if member.user_id == user_id:
+                casino_member = member
+                existing_bet = member.bet_amount
+                break
+
+        if existing_bet + bet_amount > 1000:
+            allowed = 1000 - existing_bet
+            if allowed <= 0:
+                await interaction.response.send_message(
+                    "You've already reached the maximum bet of 1000 SSC!",
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.send_message(
+                f"Bet exceeds the 1000 SSC cap. You can only bet {allowed} more SSC.",
+                ephemeral=True,
+            )
+            return
+
         if old_ssc < bet_amount:
             await interaction.response.send_message(
                 "You don't have enough SSC to bet!", ephemeral=True
@@ -128,12 +150,6 @@ class CasinoLobbyView(discord.ui.View):
         await db.change_and_log_sail_credit(
             user_id, -1, -1, -1, old_ssc, old_ssc - bet_amount, source
         )
-
-        user_id = interaction.user.id
-        casino_member = None
-        for member in self.lobby.members:
-            if member.user_id == user_id:
-                casino_member = member
 
         if casino_member:
             casino_member.bet_amount += bet_amount
