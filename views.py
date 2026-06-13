@@ -9,6 +9,7 @@ from scb import SailCreditBureau
 from util import (
     create_embed,
     disable_buttons_and_stop_view,
+    get_balance,
     user_interaction_callback,
 )
 
@@ -147,7 +148,7 @@ class PartyView(discord.ui.View):
         waitlisted = self.party.add_member(
             interaction.user.id,
             interaction.user.display_name,
-            interaction.data["user_data"]["sail_credit"],
+            get_balance(interaction),
         )
 
         await interaction.response.defer()
@@ -599,3 +600,82 @@ class LeaderboardView(MessageBook):
     async def jump(self, interaction: discord.Interaction, _):
         self.current_page = self.me_page
         await self.update_page(interaction)
+
+
+class TopupView(discord.ui.View):
+    """
+    Allows other users to donate their own SSC balance to the user.
+
+    https://stripe.com/en-ca/resources/more/acquirer-vs-issuer#what-is-an-acquirer
+    """
+
+    def __init__(self, user_id):
+        super().__init__(timeout=60)
+        self.acquiring_user_id = user_id
+        self.topup_data: dict[int, int] = {}
+
+    def generate_embed(self) -> str:
+        content = ""
+        for user_id in self.topup_data:
+            content += f"\n**<@{user_id}> | {self.topup_data[user_id]} SSC**"
+        return content
+
+    @user_interaction_callback()
+    async def topup(self, interaction: discord.Interaction, amount: int) -> bool:
+        user_id = interaction.user.id
+        user_balance = get_balance(interaction)
+
+        if self.acquiring_user_id == interaction.user.id:
+            await interaction.response.send_message(
+                "You can't donate to yourself.", ephemeral=True
+            )
+            return False
+
+        # Balance adjustment.
+        if user_balance < amount:
+            await interaction.response.send_message("Insufficient SSC.", ephemeral=True)
+            return False
+
+        await db.change_and_log_sail_credit(
+            user_id, -1, -1, -1, user_balance, user_balance - amount, "DONATION_DEBIT"
+        )
+        acquiring_user_data = await db.get_user(self.acquiring_user_id)
+        acquiring_user_balance = acquiring_user_data["sail_credit"]  # pyright: ignore
+        await db.change_and_log_sail_credit(
+            self.acquiring_user_id,
+            -1,
+            -1,
+            -1,
+            acquiring_user_balance,
+            acquiring_user_balance + amount,
+            "DONATION_CREDIT",
+        )
+
+        if user_id not in self.topup_data:
+            self.topup_data[user_id] = amount
+        else:
+            self.topup_data[user_id] += amount
+
+        return True
+
+    @discord.ui.button(label="10", style=discord.ButtonStyle.blurple)
+    async def topup_10(self, interaction: discord.Interaction, _):
+
+        if await self.topup(interaction, 10):
+            await interaction.edit_original_response(
+                embed=create_embed(title="Donors", message=self.generate_embed())
+            )
+
+    @discord.ui.button(label="100", style=discord.ButtonStyle.blurple)
+    async def topup_100(self, interaction: discord.Interaction, _):
+        if await self.topup(interaction, 100):
+            await interaction.edit_original_response(
+                embed=create_embed(title="Donors", message=self.generate_embed())
+            )
+
+    @discord.ui.button(label="250", style=discord.ButtonStyle.blurple)
+    async def topup_250(self, interaction: discord.Interaction, _):
+        if await self.topup(interaction, 250):
+            await interaction.edit_original_response(
+                embed=create_embed(title="Donors", message=self.generate_embed())
+            )

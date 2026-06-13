@@ -117,7 +117,7 @@ def down_scale_data(qc_data, n=500):
 
 
 async def create_ssc_graph_url(
-    discord_id: str, name: str, period: Literal["1h", "6h", "12h", "1d", "7d", "30d"]
+    discord_id: int, name: str, period: Literal["1h", "6h", "12h", "1d", "7d", "30d"]
 ) -> str:
 
     start_timestamp = int(time.time()) - timeparse(period)
