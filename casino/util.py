@@ -14,3 +14,18 @@ def get_crash_point():
     r = max(random.uniform(0, 1), 0.001)
     clamped = min(max(1 / r, 1.001), 9999)
     return clamped
+
+
+def mult_to_emoji(mult: float):
+    if mult >= 1000:
+        return "👑"
+    elif mult >= 100:
+        return "💎"
+    elif mult >= 10:
+        return "🔥"
+    elif mult >= 2:
+        return "📈"
+    elif mult >= 1.01:
+        return "📉"
+    else:
+        return "🪦"
