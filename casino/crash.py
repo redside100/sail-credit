@@ -5,7 +5,7 @@ import json
 import discord
 from casino.casino import DegenerateGambler
 from casino.graph import render_graph
-from casino.models import CasinoGame
+from casino.models import BetConfig, CasinoGame
 from typing import Dict, List
 
 from casino.util import get_crash_point, get_log_source
@@ -70,7 +70,7 @@ class CrashView(discord.ui.View):
         )
 
         user = interaction.data["user_data"]  # pyright: ignore
-        source = source = get_log_source(self.crash.canonical_name, "DEBIT")
+        source = get_log_source(self.crash.canonical_name, "CREDIT")
         await db.change_and_log_sail_credit(
             user_id,
             -1,
@@ -97,6 +97,7 @@ class Crash(CasinoGame):
             "image_url": "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailcrash.png",
         }
         self.game_state = CrashGameState()
+        self.bet_config = BetConfig(bet_type="freeform")
 
     def generate_embed(self):
         content = (
@@ -121,9 +122,11 @@ class Crash(CasinoGame):
         embed_contents = {
             "message": content,
             "title": self.name,
-            "color": self.embed_details["color"]
-            if not self.game_state.finished
-            else discord.Colour(0xF54242),
+            "color": (
+                self.embed_details["color"]
+                if not self.game_state.finished
+                else discord.Colour(0xF54242)
+            ),
         }
 
         return create_embed(**embed_contents)
