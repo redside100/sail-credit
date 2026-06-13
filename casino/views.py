@@ -122,7 +122,7 @@ class CasinoLobbyView(discord.ui.View):
             100,
             interaction.data["user_data"]["sail_credit"],
             interaction,
-        ) @ user_interaction_callback()
+        )
 
     async def bet_500(self, interaction: discord.Interaction):
         await self.bet(
