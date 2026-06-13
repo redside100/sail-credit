@@ -102,9 +102,7 @@ class CasinoLobbyView(discord.ui.View):
         else:
             self.lobby.members.append(DegenerateGambler(user_id, bet_amount))
 
-        await interaction.edit_original_response(
-            embed=self.lobby.generate_embed(),
-        )
+        await interaction.response.edit_message(embed=self.lobby.generate_embed())
 
     @user_interaction_callback()
     async def place_bet(self, interaction: discord.Interaction):
@@ -124,5 +122,6 @@ class CasinoLobbyView(discord.ui.View):
     async def bet_100(self, interaction: discord.Interaction):
         await self.bet(interaction, 100, interaction.data["user_data"]["sail_credit"])
 
+    @user_interaction_callback()
     async def bet_250(self, interaction: discord.Interaction):
         await self.bet(interaction, 250, interaction.data["user_data"]["sail_credit"])
