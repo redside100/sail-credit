@@ -121,7 +121,9 @@ async def create_ssc_graph_url(
 ) -> str:
 
     start_timestamp = int(time.time()) - timeparse(period)
-    credit_log = await db.get_user_sail_credit_log(discord_id, start_timestamp)
+    credit_log = await db.get_user_sail_credit_log(
+        discord_id, start_timestamp, source=None
+    )
 
     qc_data = down_scale_data(
         [{"x": d["timestamp"] * 1000, "y": d["new_sail_credit"]} for d in credit_log],
