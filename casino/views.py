@@ -43,9 +43,7 @@ class BetModal(discord.ui.Modal):
                 )
                 return
 
-            await self.bet_callback(
-                interaction.user.id, bet_amount, old_ssc, self.original_interaction
-            )
+            await self.bet_callback(self.original_interaction, bet_amount, old_ssc)
             await interaction.response.defer()
         except Exception:
             await interaction.response.send_message(
@@ -67,13 +65,16 @@ class CasinoLobbyView(discord.ui.View):
         self.add_item(bet_button)
 
     async def bet(
-        self,
-        user_id: int,
-        bet_amount: int,
-        old_ssc: int,
-        interaction: discord.Interaction,
+        self, interaction: discord.Interaction, bet_amount: int, old_ssc: int
     ):
+        user_id = interaction.user.id
         if self.lobby.started:
+            return
+
+        if old_ssc < bet_amount:
+            await interaction.response.send_message(
+                "You don't have enough SSC to bet!", ephemeral=True
+            )
             return
 
         source = get_log_source(self.lobby.game.canonical_name, "DEBIT")
@@ -108,26 +109,11 @@ class CasinoLobbyView(discord.ui.View):
 
     @user_interaction_callback()
     async def bet_10(self, interaction: discord.Interaction):
-        await self.bet(
-            interaction.user.id,
-            10,
-            interaction.data["user_data"]["sail_credit"],
-            interaction,
-        )
+        await self.bet(interaction, 10, interaction.data["user_data"]["sail_credit"])
 
     @user_interaction_callback()
     async def bet_100(self, interaction: discord.Interaction):
-        await self.bet(
-            interaction.user.id,
-            100,
-            interaction.data["user_data"]["sail_credit"],
-            interaction,
-        )
+        await self.bet(interaction, 100, interaction.data["user_data"]["sail_credit"])
 
     async def bet_500(self, interaction: discord.Interaction):
-        await self.bet(
-            interaction.user.id,
-            500,
-            interaction.data["user_data"]["sail_credit"],
-            interaction,
-        )
+        await self.bet(interaction, 500, interaction.data["user_data"]["sail_credit"])
