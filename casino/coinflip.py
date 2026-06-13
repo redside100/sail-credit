@@ -5,8 +5,8 @@ import random
 
 import discord
 from casino.casino import DegenerateGambler
-from casino.models import CasinoGame
-from typing import Dict, List, Literal, Optional
+from casino.models import BetConfig, CasinoGame
+from typing import Any, Dict, List, Literal, Optional
 
 from util import create_embed
 
@@ -28,17 +28,31 @@ class CoinFlipGameState:
 
 
 class Coinflip(CasinoGame):
-    def __init__(self, interaction: discord.Interaction):
+    def __init__(
+        self,
+        interaction: discord.Interaction,
+        host_bet: int = 10,
+        host_choice: Literal["heads", "tails"] = "heads",
+    ):
         super().__init__(interaction)
         self.name = "🪙 Sail Coinflip"
         self.canonical_name = "COINFLIP"
-        self.description = "Wager your SSC against another player! The winner will receive **1.98x** their bet."
+        self.description = f"Join a 1v1 coinflip against <@{interaction.user.id}>! The winner will receive **1.98x** their bet."
+        self.bet_config = BetConfig(bet_type="fixed", fixed_bet_amount=host_bet)
         self.lobby_time = 15
         self.embed_details = {
             "color": discord.Colour(0xFFD700),
             "image_url": "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailcoinflip.png",
         }
         self.game_state = CoinFlipGameState()
+        self.game_state.members.append(
+            DegenerateGambler(interaction.user.id, host_bet, {"choice": host_choice})
+        )
+
+    def render_player_data(self, game_data: Dict[str, Any]) -> Optional[str]:
+        choice = game_data.get("choice")
+        if choice:
+            return f"**({choice})**"
 
     async def start(self, members: List[DegenerateGambler]) -> None:
         if len(members) < 2:

@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Literal, Optional
 import uuid
+from casino.coinflip import Coinflip
 from casino.models import CasinoGame, CasinoGameAlias, DegenerateGambler
 from casino.views import CasinoLobbyView
 import db
@@ -14,7 +15,8 @@ import discord
 from casino.crash import Crash
 
 GAME_MAP: Dict[CasinoGameAlias, type[CasinoGame]] = {
-    "crash": Crash
+    "crash": Crash,
+    "coinflip": Coinflip,
 }
 
 
@@ -28,18 +30,26 @@ class CasinoLobby:
     game: CasinoGame
     members: List[DegenerateGambler] = field(default_factory=list)
     started: bool = False
+    max_size: Optional[int] = None
 
     @property
     def size(self) -> int:
         return len(self.members)
-    
+
     def generate_embed(self):
         content = f"{self.game.description}\n\nStarts: <t:{self.start_time}:R>\n"
         for member in sorted(self.members, key=lambda m: m.bet_amount, reverse=True):
+            player_data = self.game.render_player_data(member.player_data)
             content += f"- <@{member.user_id}> **({member.bet_amount} SSC)**"
+            if player_data:
+                content += f" {player_data}"
             content += "\n"
 
-        embed_contents = {"message": content, "title": self.game.name, **self.game.embed_details}
+        embed_contents = {
+            "message": content,
+            "title": self.game.name,
+            **self.game.embed_details,
+        }
 
         return create_embed(**embed_contents)
 
@@ -50,19 +60,23 @@ class CasinoPitboss:
         self.scheduler = AsyncIOScheduler(timezone="UTC")
         self.scheduler.start()
 
-    async def start_lobby(self, game: CasinoGameAlias, interaction: discord.Interaction):
+    async def start_lobby(
+        self, game: CasinoGameAlias, interaction: discord.Interaction, **kwargs
+    ):
 
         game_class = GAME_MAP[game]
 
         for lobby in self.lobbies:
-            if isinstance(lobby.game, game_class):
+            if isinstance(lobby.game, game_class) and not isinstance(
+                lobby.game, Coinflip
+            ):
                 await interaction.response.send_message(
-                    embed=create_embed(f"There is already a {game} game active!"), ephemeral=True
+                    embed=create_embed(f"There is already a {game} game active!"),
+                    ephemeral=True,
                 )
                 return
 
-
-        initialized_game = game_class(interaction)
+        initialized_game = game_class(interaction, **kwargs)
         now = int(time.time())
         start_time = now + initialized_game.lobby_time
         lobby = CasinoLobby(
@@ -71,13 +85,15 @@ class CasinoPitboss:
             game=initialized_game,
             created_at=now,
             start_time=start_time,
-            interaction=interaction
+            interaction=interaction,
         )
 
         initialized_game.finish_callback = lambda: self.finish_lobby(lobby)
 
         self.lobbies.append(lobby)
-        run_date = datetime.now(tz=timezone.utc) + timedelta(seconds=lobby.game.lobby_time)
+        run_date = datetime.now(tz=timezone.utc) + timedelta(
+            seconds=lobby.game.lobby_time
+        )
 
         async def start(casino_lobby: CasinoLobby):
             casino_lobby.started = True
@@ -91,11 +107,19 @@ class CasinoPitboss:
             id=str(lobby.uuid),
         )
 
-        await interaction.response.send_message(embed=lobby.generate_embed(), view=CasinoLobbyView(lobby))
-    
+        await interaction.response.send_message(
+            embed=lobby.generate_embed(), view=CasinoLobbyView(lobby)
+        )
+
     async def finish_lobby(self, lobby: CasinoLobby):
         if lobby in self.lobbies:
             self.lobbies.remove(lobby)
-        
+
         end_time = int(time.time())
-        await db.create_casino_lobby_log(str(lobby.uuid), lobby.start_time, end_time, lobby.game.get_metadata(), lobby.game.canonical_name)
+        await db.create_casino_lobby_log(
+            str(lobby.uuid),
+            lobby.start_time,
+            end_time,
+            lobby.game.get_metadata(),
+            lobby.game.canonical_name,
+        )

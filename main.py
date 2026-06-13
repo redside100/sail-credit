@@ -415,6 +415,30 @@ async def conviction_log(
         embed=pages[0], view=MessageBook(interaction.user.id, pages=pages)
     )
 
+
+casino_group = app_commands.Group(name="sscasino", description="Gamble your SSC!")
+
+
+@casino_group.command(name="crash", description="Start a crash lobby.")
+@user_command()
+async def casino_crash(interaction: discord.Interaction):
+    await casino_pitboss.start_lobby("crash", interaction)
+
+
+@casino_group.command(name="coinflip", description="Start a 1v1 coinflip lobby.")
+@app_commands.describe(amount="SSC to wager (opponent must match).")
+@app_commands.describe(choice="Side of the coin (heads or tails).")
+@user_command()
+async def casino_coinflip(
+    interaction: discord.Interaction,
+    amount: app_commands.Range[int, 10, 1000],
+    choice: Literal["heads", "tails"],
+):
+    await casino_pitboss.start_lobby(
+        "coinflip", interaction, host_bet=amount, choice=choice
+    )
+
+
 @bot.tree.command(
     name="sscasino",
     description="Gamble your SSC!",
@@ -423,38 +447,51 @@ async def conviction_log(
     game="The game to start a lobby for.",
 )
 @user_command()
-async def casino(
-    interaction: discord.Interaction, game: Literal["crash"]
-):
+async def casino(interaction: discord.Interaction, game: Literal["crash", "coinflip"]):
     await casino_pitboss.start_lobby(game, interaction)
-    
-    
+
+
 @bot.tree.command(
     name="daily",
     description="Claim your daily SSC!",
 )
 @user_command()
-async def daily_ssc(
-    interaction: discord.Interaction
-):
+async def daily_ssc(interaction: discord.Interaction):
     DAILY_SSC_AMOUNT = 10
     user_id = interaction.user.id
 
     # Daily reset at 8:00 AM EST.
     est = timezone(timedelta(hours=-5))
-    yesterday_8am_est = datetime.now(est).replace(hour=8, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    yesterday_8am_est = datetime.now(est).replace(
+        hour=8, minute=0, second=0, microsecond=0
+    ) - timedelta(days=1)
 
-    user_info = await db.get_user_sail_credit_log(user_id, yesterday_8am_est.timestamp(), source="DAILY_SSC")
+    user_info = await db.get_user_sail_credit_log(
+        user_id, yesterday_8am_est.timestamp(), source="DAILY_SSC"
+    )
     if not user_info:
-        current_ssc = interaction.data['user_data']["sail_credit"]
-        await db.change_and_log_sail_credit(user_id, -1, -1, -1, current_ssc, current_ssc + DAILY_SSC_AMOUNT, "DAILY_SSC")
+        current_ssc = interaction.data["user_data"]["sail_credit"]
+        await db.change_and_log_sail_credit(
+            user_id,
+            -1,
+            -1,
+            -1,
+            current_ssc,
+            current_ssc + DAILY_SSC_AMOUNT,
+            "DAILY_SSC",
+        )
         await interaction.response.send_message(
-            embed=create_embed(message=f"Daily reward of {DAILY_SSC_AMOUNT} SSC claimed. Your balance is now **{current_ssc + DAILY_SSC_AMOUNT} SSC**."),
+            embed=create_embed(
+                message=f"Daily reward of {DAILY_SSC_AMOUNT} SSC claimed. Your balance is now **{current_ssc + DAILY_SSC_AMOUNT} SSC**."
+            ),
         )
     else:
         await interaction.response.send_message(
-            embed=create_embed(message="You've already claimed your daily reward today. Why don't you try starting a **party?**"),
+            embed=create_embed(
+                message="You've already claimed your daily reward today. Why don't you try starting a **party?**"
+            ),
         )
+
 
 @bot.event
 async def on_ready():

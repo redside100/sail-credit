@@ -54,24 +54,44 @@ class BetModal(discord.ui.Modal):
 
 
 class CasinoLobbyView(discord.ui.View):
-
     def __init__(self, lobby: "CasinoLobby"):
         super().__init__(timeout=lobby.game.lobby_time)
         self.lobby = lobby
-        bet_button = discord.ui.Button(
-            label="Place bet", style=discord.ButtonStyle.blurple
-        )
-        bet_10_button = discord.ui.Button(label="10", style=discord.ButtonStyle.green)
-        bet_100_button = discord.ui.Button(label="100", style=discord.ButtonStyle.green)
-        bet_250_button = discord.ui.Button(label="250", style=discord.ButtonStyle.green)
-        bet_button.callback = self.place_bet
-        bet_10_button.callback = self.bet_10
-        bet_100_button.callback = self.bet_100
-        bet_250_button.callback = self.bet_250
-        self.add_item(bet_button)
-        self.add_item(bet_10_button)
-        self.add_item(bet_100_button)
-        self.add_item(bet_250_button)
+
+        if lobby.game.bet_config.bet_type == "freeform":
+            bet_button = discord.ui.Button(
+                label="Place bet", style=discord.ButtonStyle.blurple
+            )
+            bet_10_button = discord.ui.Button(
+                label="10", style=discord.ButtonStyle.green
+            )
+            bet_100_button = discord.ui.Button(
+                label="100", style=discord.ButtonStyle.green
+            )
+            bet_250_button = discord.ui.Button(
+                label="250", style=discord.ButtonStyle.green
+            )
+            bet_button.callback = self.place_bet
+            bet_10_button.callback = self.bet_10
+            bet_100_button.callback = self.bet_100
+            bet_250_button.callback = self.bet_250
+            self.add_item(bet_button)
+            self.add_item(bet_10_button)
+            self.add_item(bet_100_button)
+            self.add_item(bet_250_button)
+        elif (
+            lobby.game.bet_config.bet_type == "fixed"
+            and lobby.game.bet_config.fixed_bet_amount
+        ):
+            fixed_bet_button = discord.ui.Button(
+                label=f"Bet ({lobby.game.bet_config.fixed_bet_amount})"
+            )
+            fixed_bet_button.callback = self.fixed_bet
+            self.add_item(fixed_bet_button)
+
+    async def fixed_bet(self, interaction: discord.Interaction):
+        if self.lobby.started:
+            return
 
     async def bet(
         self, interaction: discord.Interaction, bet_amount: int, old_ssc: int
