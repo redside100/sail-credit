@@ -39,10 +39,7 @@ class CasinoLobby:
     def generate_embed(self):
         content = f"{self.game.description}\n\nStarts: <t:{self.start_time}:R>\n"
         for member in sorted(self.members, key=lambda m: m.bet_amount, reverse=True):
-            player_data = self.game.render_player_data(member.player_data)
             content += f"- <@{member.user_id}> **({member.bet_amount} SSC)**"
-            if player_data:
-                content += f" {player_data}"
             content += "\n"
 
         embed_contents = {
@@ -61,7 +58,11 @@ class CasinoPitboss:
         self.scheduler.start()
 
     async def start_lobby(
-        self, game: CasinoGameAlias, interaction: discord.Interaction, **kwargs
+        self,
+        game: CasinoGameAlias,
+        interaction: discord.Interaction,
+        on_lobby_create: Optional[Callable] = None,
+        **kwargs,
     ):
 
         game_class = GAME_MAP[game]
@@ -86,7 +87,11 @@ class CasinoPitboss:
             created_at=now,
             start_time=start_time,
             interaction=interaction,
+            max_size=initialized_game.max_size,
         )
+
+        if on_lobby_create:
+            on_lobby_create(lobby)
 
         initialized_game.finish_callback = lambda: self.finish_lobby(lobby)
 

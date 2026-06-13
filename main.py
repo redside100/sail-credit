@@ -5,7 +5,8 @@ from typing import Literal, Optional
 from discord import app_commands
 import discord
 from discord.ext import commands
-from casino.casino import CasinoPitboss
+from casino.casino import CasinoLobby, CasinoPitboss
+from casino.models import DegenerateGambler
 import db
 from party import Party, PartyService
 import validators
@@ -434,21 +435,33 @@ async def casino_coinflip(
     amount: app_commands.Range[int, 10, 1000],
     choice: Literal["heads", "tails"],
 ):
+
+    current_ssc = interaction.data["user_data"]["sail_credit"]
+    if current_ssc < amount:
+        await interaction.response.send_message(
+            embed="You don't have enough SSC to bet!"
+        )
+        return
+
+    await db.change_and_log_sail_credit(
+        interaction.user.id,
+        -1,
+        -1,
+        -1,
+        current_ssc,
+        current_ssc - amount,
+        source="COINFLIP",
+    )
+
+    def on_lobby_create(lobby: CasinoLobby):
+        lobby.members.append(DegenerateGambler(interaction.user.id, amount))
+
     await casino_pitboss.start_lobby(
-        "coinflip", interaction, host_bet=amount, choice=choice
+        "coinflip", interaction, on_lobby_create, host_bet=amount, host_choice=choice
     )
 
 
-@bot.tree.command(
-    name="sscasino",
-    description="Gamble your SSC!",
-)
-@app_commands.describe(
-    game="The game to start a lobby for.",
-)
-@user_command()
-async def casino(interaction: discord.Interaction, game: Literal["crash", "coinflip"]):
-    await casino_pitboss.start_lobby(game, interaction)
+bot.tree.add_command(casino_group)
 
 
 @bot.tree.command(

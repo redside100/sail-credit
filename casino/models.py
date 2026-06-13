@@ -11,12 +11,12 @@ CasinoGameAlias = Literal["crash"]
 class DegenerateGambler:
     user_id: int
     bet_amount: int
-    player_data: Dict[str, Any] = field(default_factory=dict)
 
     def __hash__(self):
         return self.user_id
 
 
+@dataclass
 class BetConfig:
     bet_type: Literal["freeform", "fixed"]
     fixed_bet_amount: int = None
@@ -31,6 +31,7 @@ class CasinoGame(ABC):
     embed_details: Dict[str, Any]
     finish_callback: Optional[Callable] = None
     bet_config: BetConfig
+    max_size: Optional[int] = None
 
     def __init__(self, interaction: discord.Interaction):
         self.interaction = interaction
@@ -45,8 +46,4 @@ class CasinoGame(ABC):
 
     @abstractmethod
     def get_metadata(self) -> Dict:
-        pass
-
-    @abstractmethod
-    def render_player_data(self, game_data: Dict[str, Any]) -> str:
         pass

@@ -1,3 +1,4 @@
+from functools import partial
 from typing import TYPE_CHECKING, Callable
 
 import discord
@@ -84,20 +85,37 @@ class CasinoLobbyView(discord.ui.View):
             and lobby.game.bet_config.fixed_bet_amount
         ):
             fixed_bet_button = discord.ui.Button(
-                label=f"Bet ({lobby.game.bet_config.fixed_bet_amount})"
+                label=f"Join ({lobby.game.bet_config.fixed_bet_amount} SSC)",
+                style=discord.ButtonStyle.blurple,
             )
             fixed_bet_button.callback = self.fixed_bet
             self.add_item(fixed_bet_button)
 
+    @user_interaction_callback()
     async def fixed_bet(self, interaction: discord.Interaction):
-        if self.lobby.started:
-            return
+        user_id = interaction.user.id
+        for member in self.lobby.members:
+            if member.user_id == user_id:
+                await interaction.response.defer()
+                return
+
+        await self.bet(
+            interaction,
+            self.lobby.game.bet_config.fixed_bet_amount,
+            interaction.data["user_data"]["sail_credit"],
+        )
 
     async def bet(
         self, interaction: discord.Interaction, bet_amount: int, old_ssc: int
     ):
         user_id = interaction.user.id
         if self.lobby.started:
+            return
+
+        if self.lobby.max_size and len(self.lobby.members) >= self.lobby.max_size:
+            await interaction.response.send_message(
+                "This lobby is full!", ephemeral=True
+            )
             return
 
         if old_ssc < bet_amount:

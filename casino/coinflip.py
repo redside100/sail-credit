@@ -1,33 +1,49 @@
-import asyncio
-from dataclasses import dataclass, field, asdict
-import json
+from dataclasses import dataclass, field
 import random
 
 import discord
-from casino.casino import DegenerateGambler
-from casino.models import BetConfig, CasinoGame
-from typing import Any, Dict, List, Literal, Optional
+from casino.models import BetConfig, CasinoGame, DegenerateGambler
+from typing import Dict, List, Literal, Optional
 
+import db
 from util import create_embed
 
 
 @dataclass
+class CoinFlipGambler(DegenerateGambler):
+    choice: Literal["heads", "tails"]
+
+
+@dataclass
 class CoinFlipGameState:
-    members: List[DegenerateGambler] = field(default_factory=list)
+    members: List[CoinFlipGambler] = field(default_factory=list)
     outcome: Optional[Literal["heads", "tails"]] = None
-    winner: Optional[DegenerateGambler] = None
     win_multiplier: float = 1.98
 
     def to_dict(self):
         return {
-            "members": [member.user_id for member in self.members],
+            "members": [
+                {
+                    "id": member.user_id,
+                    "choice": member.choice,
+                    "bet_amount": member.bet_amount,
+                }
+                for member in self.members
+            ],
             "outcome": self.outcome,
-            "winner": self.winner.user_id if self.winner else None,
             "win_multiplier": self.win_multiplier,
         }
 
 
 class Coinflip(CasinoGame):
+
+    HEADS_URL = (
+        "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailheads.png"
+    )
+    TAILS_URL = (
+        "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailtails.png"
+    )
+
     def __init__(
         self,
         interaction: discord.Interaction,
@@ -37,41 +53,72 @@ class Coinflip(CasinoGame):
         super().__init__(interaction)
         self.name = "🪙 Sail Coinflip"
         self.canonical_name = "COINFLIP"
-        self.description = f"Join a 1v1 coinflip against <@{interaction.user.id}>! The winner will receive **1.98x** their bet."
+
+        self.game_state = CoinFlipGameState()
+        self.description = f"Join a 1v1 coinflip against <@{interaction.user.id}> ({host_choice})!\n\nThe winner receives **{int(host_bet * self.game_state.win_multiplier)} SSC**."
         self.bet_config = BetConfig(bet_type="fixed", fixed_bet_amount=host_bet)
         self.lobby_time = 15
         self.embed_details = {
             "color": discord.Colour(0xFFD700),
             "image_url": "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailcoinflip.png",
         }
-        self.game_state = CoinFlipGameState()
-        self.game_state.members.append(
-            DegenerateGambler(interaction.user.id, host_bet, {"choice": host_choice})
+        self.host_choice = host_choice
+        self.max_size = 2
+
+    async def flip(self):
+        winner = random.choice(self.game_state.members)
+        loser = [m for m in self.game_state.members if m.user_id != winner.user_id][0]
+        self.game_state.outcome = winner.choice
+        win_amount = int(winner.bet_amount * self.game_state.win_multiplier)
+
+        winner_data = await db.get_user(winner.user_id)
+        ssc = winner_data["sail_credit"]
+        await db.change_and_log_sail_credit(
+            winner.user_id, -1, -1, -1, ssc, ssc + win_amount
         )
 
-    def render_player_data(self, game_data: Dict[str, Any]) -> Optional[str]:
-        choice = game_data.get("choice")
-        if choice:
-            return f"**({choice})**"
+        await self.interaction.edit_original_response(
+            embed=create_embed(
+                f"<@{winner.user_id}> wins! **(+{win_amount} SSC)**\n\nBetter luck next time, <@{loser.user_id}>.",
+                f"{winner.choice.capitalize()}!",
+                image_url=(
+                    self.HEADS_URL if winner.choice == "heads" else self.TAILS_URL
+                ),
+            )
+        )
 
     async def start(self, members: List[DegenerateGambler]) -> None:
-        if len(members) < 2:
+        if len(members) == 1:
             await self.interaction.edit_original_response(
                 embed=create_embed(
-                    "No opponent found!",
+                    f"<@{members[0].user_id}> No opponent found!",
+                    image_url=self.embed_details["image_url"],
                     color=discord.Colour.red(),
                 ),
                 view=None,
             )
+            user_data = await db.get_user(members[0].user_id)
+            ssc = user_data["sail_credit"]
+            await db.change_and_log_sail_credit(
+                members[0].user_id, -1, -1, -1, ssc, ssc + members[0].bet_amount
+            )
             return
 
-        random_outcome = random.choice(["heads", "tails"])
-        self.game_state.outcome = random_outcome
-        self.game_state.winner = random.choice(members)
+        opponent_choice = "heads" if self.host_choice == "tails" else "heads"
+        self.game_state.members = [
+            CoinFlipGambler(
+                user_id=members[0].user_id,
+                bet_amount=members[0].bet_amount,
+                choice=self.host_choice,
+            ),
+            CoinFlipGambler(
+                user_id=members[1].user_id,
+                bet_amount=members[1].bet_amount,
+                choice=opponent_choice,
+            ),
+        ]
 
-        await self.interaction.edit_original_response(
-            embed=self.generate_embed(), view=None
-        )
+        await self.flip()
         await self.finish()
 
     async def finish(self) -> None:
