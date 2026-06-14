@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class BetModal(discord.ui.Modal):
     bet_amount = discord.ui.TextInput(
         label="Bet amount",
-        placeholder="Amount of SSC to bet (10 to 1000)",
+        placeholder="Amount of SSC to bet",
         style=discord.TextStyle.short,
         required=True,
         max_length=12,
@@ -33,9 +33,6 @@ class BetModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         try:
             bet_amount = int(self.bet_amount.value)
-            if not 10 <= bet_amount <= 1000:
-                raise ValueError("Bet amount must be within 10 to 1000.")
-
             old_ssc = get_balance(interaction)
             if old_ssc < bet_amount:
                 await interaction.response.send_message(
@@ -115,27 +112,11 @@ class CasinoLobbyView(discord.ui.View):
             )
             return
 
-        existing_bet = 0
         casino_member = None
         for member in self.lobby.members:
             if member.user_id == user_id:
                 casino_member = member
-                existing_bet = member.bet_amount
                 break
-
-        if existing_bet + bet_amount > 1000:
-            allowed = 1000 - existing_bet
-            if allowed <= 0:
-                await interaction.response.send_message(
-                    "You've already reached the maximum bet of 1000 SSC!",
-                    ephemeral=True,
-                )
-                return
-            await interaction.response.send_message(
-                f"Bet exceeds the 1000 SSC cap. You can only bet {allowed} more SSC.",
-                ephemeral=True,
-            )
-            return
 
         if old_ssc < bet_amount:
             await interaction.response.send_message(
