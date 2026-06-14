@@ -666,7 +666,6 @@ class TopupView(discord.ui.View):
                 embed=create_embed(title="Donors", message=self.generate_embed())
             )
             return
-        print("what")
         await interaction.response.defer()
 
     @discord.ui.button(label="100", style=discord.ButtonStyle.blurple)
