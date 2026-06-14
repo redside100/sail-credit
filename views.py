@@ -666,7 +666,8 @@ class TopupView(discord.ui.View):
                 embed=create_embed(title="Donors", message=self.generate_embed())
             )
             return
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
     @discord.ui.button(label="100", style=discord.ButtonStyle.blurple)
     async def topup_100(self, interaction: discord.Interaction, _):
@@ -675,7 +676,8 @@ class TopupView(discord.ui.View):
                 embed=create_embed(title="Donors", message=self.generate_embed())
             )
             return
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
     @discord.ui.button(label="250", style=discord.ButtonStyle.blurple)
     async def topup_250(self, interaction: discord.Interaction, _):
@@ -684,4 +686,5 @@ class TopupView(discord.ui.View):
                 embed=create_embed(title="Donors", message=self.generate_embed())
             )
             return
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
