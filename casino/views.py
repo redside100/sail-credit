@@ -44,14 +44,12 @@ class BetModal(discord.ui.Modal):
                 )
                 return
 
-            await self.bet_callback(self.original_interaction, bet_amount, old_ssc)
-            await interaction.response.defer()
-        except Exception:
+            await self.bet_callback(interaction, bet_amount, old_ssc)
+        except ValueError:
             await interaction.response.send_message(
                 "The bet amount must be a whole number between 10 to 1000.",
                 ephemeral=True,
             )
-            return
 
 
 class CasinoLobbyView(discord.ui.View):
