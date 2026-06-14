@@ -112,6 +112,12 @@ class CasinoLobbyView(discord.ui.View):
             )
             return
 
+        casino_member = None
+        for member in self.lobby.members:
+            if member.user_id == user_id:
+                casino_member = member
+                break
+
         if old_ssc < bet_amount:
             await interaction.response.send_message(
                 "You don't have enough SSC to bet!", ephemeral=True
@@ -123,9 +129,14 @@ class CasinoLobbyView(discord.ui.View):
             user_id, -1, -1, -1, old_ssc, old_ssc - bet_amount, source
         )
 
-        self.lobby.members.append(
-            DegenerateGambler(user_id, bet_amount, interaction.user.display_avatar.url)
-        )
+        if casino_member:
+            casino_member.bet_amount += bet_amount
+        else:
+            self.lobby.members.append(
+                DegenerateGambler(
+                    user_id, bet_amount, interaction.user.display_avatar.url
+                )
+            )
 
         await interaction.response.edit_message(embed=self.lobby.generate_embed())
 
