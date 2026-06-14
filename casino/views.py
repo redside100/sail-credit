@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class BetModal(discord.ui.Modal):
     bet_amount = discord.ui.TextInput(
         label="Bet amount",
-        placeholder="Amount of SSC to bet (10 to 1000)",
+        placeholder="Amount of SSC to bet",
         style=discord.TextStyle.short,
         required=True,
         max_length=12,
@@ -33,9 +33,6 @@ class BetModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         try:
             bet_amount = int(self.bet_amount.value)
-            if not 10 <= bet_amount <= 1000:
-                raise ValueError("Bet amount must be within 10 to 1000.")
-
             old_ssc = get_balance(interaction)
             if old_ssc < bet_amount:
                 await interaction.response.send_message(
