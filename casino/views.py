@@ -112,6 +112,13 @@ class CasinoLobbyView(discord.ui.View):
             )
             return
 
+        if bet_amount < 10:
+            interaction.response.send_message(
+                "Invalid bet amount.",
+                ephemeral=True,
+            )
+            return
+
         casino_member = None
         for member in self.lobby.members:
             if member.user_id == user_id:
