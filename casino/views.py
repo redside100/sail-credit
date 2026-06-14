@@ -112,6 +112,13 @@ class CasinoLobbyView(discord.ui.View):
             )
             return
 
+        if bet_amount < 10:
+            interaction.response.send_message(
+                "Invalid bet amount.",
+                ephemeral=True,
+            )
+            return
+
         casino_member = None
         for member in self.lobby.members:
             if member.user_id == user_id:
@@ -160,4 +167,4 @@ class CasinoLobbyView(discord.ui.View):
 
     @user_interaction_callback()
     async def bet_250(self, interaction: discord.Interaction):
-        await self.bet(interaction, 250, get_balance(interaction))
+        await self.bet(interaction, 250, get_balance(interaction))T
