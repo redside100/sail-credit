@@ -2,6 +2,7 @@ import asyncio
 import os
 import time
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo
 from discord import app_commands
 import discord
 from discord.ext import commands
@@ -499,13 +500,19 @@ async def daily_ssc(interaction: discord.Interaction):
     user_id = interaction.user.id
 
     # Daily reset at 8:00 AM EST.
-    est = timezone(timedelta(hours=-5))
-    yesterday_8am_est = datetime.now(est).replace(
-        hour=8, minute=0, second=0, microsecond=0
-    ) - timedelta(days=1)
+    est = ZoneInfo("America/New_York")
+    now_est = datetime.now(est)
+    # If it's before 8 AM today, the last reset was yesterday at 8 AM
+    # If it's after 8 AM today, the last reset was today at 8 AM
+    if now_est.hour < 8:
+        last_reset = now_est.replace(
+            hour=8, minute=0, second=0, microsecond=0
+        ) - timedelta(days=1)
+    else:
+        last_reset = now_est.replace(hour=8, minute=0, second=0, microsecond=0)
 
     user_info = await db.get_user_sail_credit_log(
-        user_id, yesterday_8am_est.timestamp(), source="DAILY_SSC"
+        user_id, last_reset.timestamp(), source="DAILY_SSC"
     )
     if not user_info:
         current_ssc = get_balance(interaction)
