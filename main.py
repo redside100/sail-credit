@@ -466,6 +466,9 @@ async def casino_coinflip(
     )
 
 
+bot.tree.add_command(casino_group)
+
+
 @bot.tree.command(
     name="beg",
     description="Request a top up to your balance.",
