@@ -18,8 +18,9 @@ from util import (
     get_scheduled_datetime_from_string,
     user_command,
     create_embed,
+    get_balance,
 )
-from views import LeaderboardView, MessageBook, PartyView
+from views import LeaderboardView, MessageBook, PartyView, TopupView
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -84,7 +85,7 @@ async def create_party(
 
     party: Party = party_service.create_party(
         user=interaction.user,
-        user_ssc=interaction.data["user_data"]["sail_credit"],
+        user_ssc=get_balance(interaction),
         role=role,
         name=name,
         max_size=max_size,
@@ -436,7 +437,7 @@ async def casino_coinflip(
     choice: Literal["heads", "tails"],
 ):
 
-    current_ssc = interaction.data["user_data"]["sail_credit"]
+    current_ssc = get_balance(interaction)
     if current_ssc < amount:
         await interaction.response.send_message(
             embed="You don't have enough SSC to bet!"
@@ -465,7 +466,24 @@ async def casino_coinflip(
     )
 
 
-bot.tree.add_command(casino_group)
+@bot.tree.command(
+    name="beg",
+    description="Request a top up to your balance.",
+)
+@app_commands.describe(
+    message="An optional description for the request.",
+)
+@user_command()
+async def topup(
+    interaction: discord.Interaction,
+    message: str = "I'm irresponsible and lost all my credits 🥺",
+):
+    content = f"**Emergency Funding Request** (<@{interaction.user.id}> | {get_balance(interaction)} SSC)\n> _{message}_"
+
+    await interaction.response.send_message(
+        content=content,
+        view=TopupView(user_id=interaction.user.id),
+    )
 
 
 @bot.tree.command(
@@ -487,7 +505,7 @@ async def daily_ssc(interaction: discord.Interaction):
         user_id, yesterday_8am_est.timestamp(), source="DAILY_SSC"
     )
     if not user_info:
-        current_ssc = interaction.data["user_data"]["sail_credit"]
+        current_ssc = get_balance(interaction)
         await db.change_and_log_sail_credit(
             user_id,
             -1,

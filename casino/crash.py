@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 import json
 
 import discord
@@ -8,7 +8,7 @@ from casino.graph import render_graph
 from casino.models import BetConfig, CasinoGame
 from typing import Dict, List
 
-from casino.util import get_crash_point, get_log_source
+from casino.util import get_crash_point, get_log_source, mult_to_emoji
 import db
 from util import create_embed, user_interaction_callback
 import time
@@ -62,9 +62,9 @@ class CrashView(discord.ui.View):
             await interaction.response.defer()
             return
 
-        self.crash.game_state.cash_outs[
-            crash_member
-        ] = self.crash.game_state.current_multiplier
+        self.crash.game_state.cash_outs[crash_member] = (
+            self.crash.game_state.current_multiplier
+        )
         cash_out_amount = int(
             crash_member.bet_amount * self.crash.game_state.current_multiplier
         )
@@ -113,7 +113,7 @@ class Crash(CasinoGame):
             cash_out_multi = self.game_state.cash_outs.get(member)
             if cash_out_multi is not None:
                 amount = int(cash_out_multi * member.bet_amount)
-                entry = f"- <@{member.user_id}> **(+{amount} SSC)** 🎉 Cashed out at **{format(round(cash_out_multi, 3), '.2f')}x**"
+                entry = f"- <@{member.user_id}> **(+{amount} SSC)** 🎉 Cashed out at **{format(round(cash_out_multi, 3), '.2f')}x** {mult_to_emoji(cash_out_multi)}"
             elif self.game_state.finished:
                 entry = f"- <@{member.user_id}> **(-{member.bet_amount} SSC)** 🪦"
 
@@ -149,7 +149,7 @@ class Crash(CasinoGame):
             if not crash_mult:
                 continue
 
-            crash_string = "📈" if crash_mult >= 2 else "📉"
+            crash_string: str = mult_to_emoji(crash_mult)
             crash_string += " " + format(round(crash_mult, 3), ".2f") + "x"
             past_crash_mults.append(crash_string)
 

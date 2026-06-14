@@ -5,7 +5,7 @@ import discord
 from casino.models import DegenerateGambler
 from casino.util import get_log_source
 import db
-from util import user_interaction_callback
+from util import user_interaction_callback, get_balance
 
 if TYPE_CHECKING:
     from casino.casino import CasinoLobby
@@ -37,7 +37,7 @@ class BetModal(discord.ui.Modal):
             if not 10 <= bet_amount <= 1000:
                 raise ValueError("Bet amount must be within 10 to 1000.")
 
-            old_ssc = interaction.data["user_data"]["sail_credit"]  # pyright: ignore
+            old_ssc = get_balance(interaction)
             if old_ssc < bet_amount:
                 await interaction.response.send_message(
                     "You don't have enough SSC to bet!", ephemeral=True
@@ -102,7 +102,7 @@ class CasinoLobbyView(discord.ui.View):
         await self.bet(
             interaction,
             self.lobby.game.bet_config.fixed_bet_amount,
-            interaction.data["user_data"]["sail_credit"],
+            get_balance(interaction),
         )
 
     async def bet(
@@ -158,12 +158,12 @@ class CasinoLobbyView(discord.ui.View):
 
     @user_interaction_callback()
     async def bet_10(self, interaction: discord.Interaction):
-        await self.bet(interaction, 10, interaction.data["user_data"]["sail_credit"])
+        await self.bet(interaction, 10, get_balance(interaction))
 
     @user_interaction_callback()
     async def bet_100(self, interaction: discord.Interaction):
-        await self.bet(interaction, 100, interaction.data["user_data"]["sail_credit"])
+        await self.bet(interaction, 100, get_balance(interaction))
 
     @user_interaction_callback()
     async def bet_250(self, interaction: discord.Interaction):
-        await self.bet(interaction, 250, interaction.data["user_data"]["sail_credit"])
+        await self.bet(interaction, 250, get_balance(interaction))
