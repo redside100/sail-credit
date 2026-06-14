@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import discord
 from abc import ABC, abstractmethod

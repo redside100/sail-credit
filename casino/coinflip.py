@@ -1,8 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-import io
 import random
-from turtle import back
 
 import discord
 from casino.flip_generator import create_coinflip_gif
