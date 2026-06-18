@@ -610,7 +610,7 @@ class TopupView(discord.ui.View):
     """
 
     def __init__(self, user_id):
-        super().__init__(timeout=60)
+        super().__init__(timeout=60 * 5)
         self.acquiring_user_id = user_id
         self.topup_data: dict[int, int] = {}
 
