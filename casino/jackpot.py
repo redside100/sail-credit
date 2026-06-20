@@ -33,14 +33,6 @@ class JackpotGameState:
 
 
 class Jackpot(CasinoGame):
-
-    HEADS_URL = (
-        "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailheads.png"
-    )
-    TAILS_URL = (
-        "https://redside.tor1.cdn.digitaloceanspaces.com/public/assets/sailtails.png"
-    )
-
     def __init__(
         self,
         interaction: discord.Interaction,
