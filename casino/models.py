@@ -48,3 +48,8 @@ class CasinoGame(ABC):
     @abstractmethod
     def get_metadata(self) -> Dict:
         pass
+
+    def player_descriptor(
+        self, member: DegenerateGambler, members: List[DegenerateGambler]
+    ) -> str:
+        return f"<@{member.user_id}> **({member.bet_amount} SSC)**"

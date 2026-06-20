@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional
 import uuid
 from casino.coinflip import Coinflip
+from casino.jackpot import Jackpot
 from casino.models import CasinoGame, CasinoGameAlias, DegenerateGambler
 from casino.views import CasinoLobbyView
 import db
@@ -16,6 +17,7 @@ from casino.crash import Crash
 GAME_MAP: Dict[CasinoGameAlias, type[CasinoGame]] = {
     "crash": Crash,
     "coinflip": Coinflip,
+    "jackpot": Jackpot,
 }
 
 
@@ -38,8 +40,7 @@ class CasinoLobby:
     def generate_embed(self):
         content = f"{self.game.description}\n\nStarts: <t:{self.start_time}:R>\n"
         for member in sorted(self.members, key=lambda m: m.bet_amount, reverse=True):
-            content += f"- <@{member.user_id}> **({member.bet_amount} SSC)**"
-            content += "\n"
+            content += f"- {self.game.player_descriptor(member, self.members)}\n"
 
         embed_contents = {
             "message": content,
