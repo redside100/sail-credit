@@ -7,6 +7,7 @@ from casino.flip_generator import create_coinflip_gif
 from casino.models import BetConfig, CasinoGame, DegenerateGambler
 from typing import Dict, List, Literal, Optional
 
+from casino.util import get_log_source
 import db
 from util import create_embed
 
@@ -108,7 +109,13 @@ class Coinflip(CasinoGame):
         winner_data = await db.get_user(winner.user_id)
         ssc = winner_data["sail_credit"]
         await db.change_and_log_sail_credit(
-            winner.user_id, -1, -1, -1, ssc, ssc + win_amount
+            winner.user_id,
+            -1,
+            -1,
+            -1,
+            ssc,
+            ssc + win_amount,
+            source=get_log_source(self.canonical_name, "CREDIT"),
         )
 
         await self.interaction.edit_original_response(
@@ -135,8 +142,15 @@ class Coinflip(CasinoGame):
             user_data = await db.get_user(members[0].user_id)
             ssc = user_data["sail_credit"]
             await db.change_and_log_sail_credit(
-                members[0].user_id, -1, -1, -1, ssc, ssc + members[0].bet_amount
+                members[0].user_id,
+                -1,
+                -1,
+                -1,
+                ssc,
+                ssc + members[0].bet_amount,
+                source=get_log_source(self.canonical_name, "REFUND"),
             )
+            await self.finish()
             return
 
         opponent_choice = "heads" if self.host_choice == "tails" else "tails"

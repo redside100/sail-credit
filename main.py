@@ -467,6 +467,12 @@ async def casino_coinflip(
     )
 
 
+@casino_group.command(name="jackpot", description="Start a jackpot lobby.")
+@user_command()
+async def casino_jackpot(interaction: discord.Interaction):
+    await casino_pitboss.start_lobby("jackpot", interaction)
+
+
 bot.tree.add_command(casino_group)
 
 
