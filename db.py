@@ -1,5 +1,7 @@
+from datetime import datetime, timezone
 import time
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 import aiosqlite
 
 import party
@@ -201,3 +203,45 @@ async def get_casino_lobby_logs(game: str, limit: int = 10) -> Dict:
     ) as cursor:
         rows = await cursor.fetchall()
         return rows
+
+
+def get_reset_time(timestamp: int) -> int:
+    """
+    Returns the day's reset timestamp of the given timestamp.
+    """
+
+    dt = datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone(
+        ZoneInfo("America/New_York")
+    )
+    reset_time = dt.replace(hour=8, minute=0, second=0, microsecond=0)
+    return reset_time.timestamp()
+
+
+async def get_daily_reward_streak(user_id: int) -> int:
+    """
+    To be called BEFORE registering today's daily reward.
+    """
+    async with db.execute(
+        "SELECT timestamp FROM sail_credit_log WHERE discord_id = ? AND source = ? ORDER BY timestamp DESC",
+        (user_id, "DAILY_SSC"),
+    ) as cursor:
+        rows = await cursor.fetchall()
+
+        if not rows:
+            return 0
+
+        now = int(datetime.now(timezone.utc).timestamp())
+        expected_reset = int(get_reset_time(now))
+
+        streak = 0
+        for row in rows:
+            row_reset = int(get_reset_time(row["timestamp"]))
+            if row_reset == expected_reset:
+                streak += 1
+                expected_reset -= 86400
+            elif row_reset > expected_reset:
+                continue  # skip duplicates in the same window
+            else:
+                break
+
+        return streak

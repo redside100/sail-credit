@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import functools
 import math
@@ -250,15 +251,31 @@ def get_balance(interaction: discord.Interaction) -> int:
     return interaction.data["user_data"]["sail_credit"]  # pyright: ignore
 
 
-async def get_daily_reward(user_id: int) -> Tuple[int, int, int, int, int, int]:
+@dataclass
+class DailyRewardInfo:
+    total_reward: int
+    base_amount: int
+    random_bonus: int
+    streak_bonus: int
+    current_streak: int
+    ranking_bonus: int
+    user_rank: int
+    total_entries: int
+
+
+async def get_daily_reward(user_id: int) -> DailyRewardInfo:
     """
     Returns the daily reward and breakdown amount based on the user's current leaderboard percentile and random chance.
-    Returns a tuple of (total_reward, base_amount, random_bonus, ranking_bonus, user_rank, total_entries)
     """
     amount = 10
     random_bonus = 0
     if random.uniform(0, 1) < 0.15:  # 15% chance for a bonus
         random_bonus += random.randint(1, 20)  # Random bonus between 1 and 20
+
+    current_streak = await db.get_daily_reward_streak(user_id)
+
+    # 1 SSC for each day in the streak after the first. Maxes out at 30 days.
+    streak_bonus = min(30, current_streak)
 
     leaderboard = await db.get_ssc_leaderboard()
     total_entries = len(leaderboard)
@@ -271,8 +288,19 @@ async def get_daily_reward(user_id: int) -> Tuple[int, int, int, int, int, int]:
         None,
     )
 
+    total_reward = amount + random_bonus + streak_bonus
+
     if not user_rank or total_entries == 0:
-        return amount + random_bonus, amount, random_bonus, 0, 0, total_entries
+        return DailyRewardInfo(
+            total_reward=total_reward,
+            base_amount=amount,
+            random_bonus=random_bonus,
+            streak_bonus=streak_bonus,
+            current_streak=current_streak,
+            ranking_bonus=0,
+            user_rank=0,
+            total_entries=total_entries,
+        )
 
     percentile = (user_rank / total_entries) * 100
 
@@ -294,12 +322,15 @@ async def get_daily_reward(user_id: int) -> Tuple[int, int, int, int, int, int]:
     inverted = 1 - (percentile - 1) / 99
     curved = inverted**p
     ranking_bonus = int(20 * (math.exp(k * curved) - 1) / (math.exp(k) - 1))
+    total_reward += ranking_bonus
 
-    return (
-        amount + random_bonus + ranking_bonus,
-        amount,
-        random_bonus,
-        ranking_bonus,
-        user_rank,
-        total_entries,
+    return DailyRewardInfo(
+        total_reward=total_reward,
+        base_amount=amount,
+        random_bonus=random_bonus,
+        streak_bonus=streak_bonus,
+        current_streak=current_streak,
+        ranking_bonus=ranking_bonus,
+        user_rank=user_rank,
+        total_entries=total_entries,
     )
