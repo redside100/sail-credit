@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from util import (
     create_ssc_graph_url,
     divide_chunks,
+    get_daily_reward,
     get_scheduled_datetime_from_string,
     user_command,
     create_embed,
@@ -502,7 +503,6 @@ async def topup(
 )
 @user_command()
 async def daily_ssc(interaction: discord.Interaction):
-    DAILY_SSC_AMOUNT = 10
     user_id = interaction.user.id
 
     # Daily reset at 8:00 AM EST.
@@ -520,6 +520,15 @@ async def daily_ssc(interaction: discord.Interaction):
     user_info = await db.get_user_sail_credit_log(
         user_id, last_reset.timestamp(), source="DAILY_SSC"
     )
+
+    (
+        daily_amount,
+        base_amount,
+        random_bonus,
+        ranking_bonus,
+        user_rank,
+        total_entries,
+    ) = await get_daily_reward(user_id)
     if not user_info:
         current_ssc = get_balance(interaction)
         await db.change_and_log_sail_credit(
@@ -528,13 +537,26 @@ async def daily_ssc(interaction: discord.Interaction):
             -1,
             -1,
             current_ssc,
-            current_ssc + DAILY_SSC_AMOUNT,
+            current_ssc + daily_amount,
             "DAILY_SSC",
         )
+        embed = create_embed(
+            title="Daily Reward",
+            message=f"Daily reward of **{daily_amount} SSC** claimed. Your balance is now **{current_ssc + daily_amount} SSC**.",
+        )
+
+        embed.add_field(name="Base amount", value=f"{base_amount} SSC", inline=True)
+        if random_bonus > 0:
+            embed.add_field(
+                name="Random bonus", value=f"{random_bonus} SSC", inline=True
+            )
+        embed.add_field(
+            name=f"Ranking bonus (#{user_rank}/#{total_entries})",
+            value=f"{ranking_bonus} SSC",
+            inline=True,
+        )
         await interaction.response.send_message(
-            embed=create_embed(
-                message=f"Daily reward of {DAILY_SSC_AMOUNT} SSC claimed. Your balance is now **{current_ssc + DAILY_SSC_AMOUNT} SSC**."
-            ),
+            embed=embed,
         )
     else:
         await interaction.response.send_message(

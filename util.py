@@ -1,14 +1,15 @@
 from datetime import datetime, timedelta, timezone
 import functools
+import math
 import time
 from typing import Literal, Optional, Tuple
 import discord
 from pytimeparse import parse as timeparse
 import db
 from quickchart import QuickChart
-from dateutil import parser
 from zoneinfo import ZoneInfo
 import re
+import random
 
 
 def user_command():
@@ -247,3 +248,58 @@ def get_balance(interaction: discord.Interaction) -> int:
     Centralize this call so we don't need to keep adding pyright: ignores.
     """
     return interaction.data["user_data"]["sail_credit"]  # pyright: ignore
+
+
+async def get_daily_reward(user_id: int) -> Tuple[int, int, int, int, int, int]:
+    """
+    Returns the daily reward and breakdown amount based on the user's current leaderboard percentile and random chance.
+    Returns a tuple of (total_reward, base_amount, random_bonus, ranking_bonus, user_rank, total_entries)
+    """
+    amount = 10
+    random_bonus = 0
+    if random.uniform(0, 1) < 0.15:  # 15% chance for a bonus
+        random_bonus += random.randint(1, 20)  # Random bonus between 1 and 20
+
+    leaderboard = await db.get_ssc_leaderboard()
+    total_entries = len(leaderboard)
+    user_rank = next(
+        (
+            i + 1
+            for i, entry in enumerate(leaderboard)
+            if entry["discord_id"] == user_id
+        ),
+        None,
+    )
+
+    if not user_rank or total_entries == 0:
+        return amount + random_bonus, amount, random_bonus, 0, 0, total_entries
+
+    percentile = (user_rank / total_entries) * 100
+
+    """
+    k=4, p=0.5, floored
+
+    Percentile │ Score
+    ───────────┼──────
+         1     │    20
+        10     │    13
+        25     │     9
+        50     │     5
+        75     │     2
+        90     │     1
+       100     │     0
+    """
+    k = 4
+    p = 0.5
+    inverted = 1 - (percentile - 1) / 99
+    curved = inverted**p
+    ranking_bonus = int(20 * (math.exp(k * curved) - 1) / (math.exp(k) - 1))
+
+    return (
+        amount + random_bonus + ranking_bonus,
+        amount,
+        random_bonus,
+        ranking_bonus,
+        user_rank,
+        total_entries,
+    )
