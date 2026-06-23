@@ -231,16 +231,15 @@ async def get_daily_reward_streak(user_id: int) -> int:
             return 0
 
         now = int(datetime.now(timezone.utc).timestamp())
-        expected_reset = int(get_reset_time(now))
-
+        expected_reset = int(get_reset_time(now)) - 86400  # yesterday's reset timestamp
         streak = 0
         for row in rows:
             row_reset = int(get_reset_time(row["timestamp"]))
-            if row_reset == expected_reset:
+            if row_reset > expected_reset:
+                continue  # skip duplicate entries
+            elif row_reset == expected_reset:
                 streak += 1
                 expected_reset -= 86400
-            elif row_reset > expected_reset:
-                continue  # skip duplicates in the same window
             else:
                 break
 
