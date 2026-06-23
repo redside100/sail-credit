@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from util import (
     create_ssc_graph_url,
     divide_chunks,
+    get_daily_reward,
     get_scheduled_datetime_from_string,
     user_command,
     create_embed,
@@ -502,7 +503,6 @@ async def topup(
 )
 @user_command()
 async def daily_ssc(interaction: discord.Interaction):
-    DAILY_SSC_AMOUNT = 10
     user_id = interaction.user.id
 
     # Daily reset at 8:00 AM EST.
@@ -520,6 +520,8 @@ async def daily_ssc(interaction: discord.Interaction):
     user_info = await db.get_user_sail_credit_log(
         user_id, last_reset.timestamp(), source="DAILY_SSC"
     )
+
+    reward_info = await get_daily_reward(user_id)
     if not user_info:
         current_ssc = get_balance(interaction)
         await db.change_and_log_sail_credit(
@@ -528,13 +530,33 @@ async def daily_ssc(interaction: discord.Interaction):
             -1,
             -1,
             current_ssc,
-            current_ssc + DAILY_SSC_AMOUNT,
+            current_ssc + reward_info.total_reward,
             "DAILY_SSC",
         )
+        embed = create_embed(
+            title="Daily Reward",
+            message=f"Daily reward of **{reward_info.total_reward} SSC** claimed. Your balance is now **{current_ssc + reward_info.total_reward} SSC**.",
+        )
+
+        embed.add_field(name="💳 Base amount", value=f"{reward_info.base_amount} SSC")
+        if reward_info.random_bonus > 0:
+            embed.add_field(
+                name="🎲 Random bonus",
+                value=f"{reward_info.random_bonus} SSC",
+                inline=True,
+            )
+        embed.add_field(
+            name=f"🏅 Ranking bonus (#{reward_info.user_rank}/#{reward_info.total_entries})",
+            value=f"{reward_info.ranking_bonus} SSC",
+            inline=True,
+        )
+        embed.add_field(
+            name=f"🔥 Streak bonus ({reward_info.current_streak})",
+            value=f"{reward_info.streak_bonus} SSC",
+            inline=True,
+        )
         await interaction.response.send_message(
-            embed=create_embed(
-                message=f"Daily reward of {DAILY_SSC_AMOUNT} SSC claimed. Your balance is now **{current_ssc + DAILY_SSC_AMOUNT} SSC**."
-            ),
+            embed=embed,
         )
     else:
         await interaction.response.send_message(

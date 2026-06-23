@@ -1,14 +1,16 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import functools
+import math
 import time
 from typing import Literal, Optional, Tuple
 import discord
 from pytimeparse import parse as timeparse
 import db
 from quickchart import QuickChart
-from dateutil import parser
 from zoneinfo import ZoneInfo
 import re
+import random
 
 
 def user_command():
@@ -247,3 +249,88 @@ def get_balance(interaction: discord.Interaction) -> int:
     Centralize this call so we don't need to keep adding pyright: ignores.
     """
     return interaction.data["user_data"]["sail_credit"]  # pyright: ignore
+
+
+@dataclass
+class DailyRewardInfo:
+    total_reward: int
+    base_amount: int
+    random_bonus: int
+    streak_bonus: int
+    current_streak: int
+    ranking_bonus: int
+    user_rank: int
+    total_entries: int
+
+
+async def get_daily_reward(user_id: int) -> DailyRewardInfo:
+    """
+    Returns the daily reward and breakdown amount based on the user's current leaderboard percentile and random chance.
+    """
+    amount = 10
+    random_bonus = 0
+    if random.uniform(0, 1) < 0.15:  # 15% chance for a bonus
+        random_bonus += random.randint(1, 20)  # Random bonus between 1 and 20
+
+    current_streak = await db.get_daily_reward_streak(user_id)
+
+    # 1 SSC for each day in the streak after the first. Maxes out at 30 days.
+    streak_bonus = min(30, current_streak)
+
+    leaderboard = await db.get_ssc_leaderboard()
+    total_entries = len(leaderboard)
+    user_rank = next(
+        (
+            i + 1
+            for i, entry in enumerate(leaderboard)
+            if entry["discord_id"] == user_id
+        ),
+        None,
+    )
+
+    total_reward = amount + random_bonus + streak_bonus
+
+    if not user_rank or total_entries == 0:
+        return DailyRewardInfo(
+            total_reward=total_reward,
+            base_amount=amount,
+            random_bonus=random_bonus,
+            streak_bonus=streak_bonus,
+            current_streak=current_streak,
+            ranking_bonus=0,
+            user_rank=0,
+            total_entries=total_entries,
+        )
+
+    percentile = (user_rank / total_entries) * 100
+
+    """
+    k=4, p=0.5, floored
+
+    Percentile │ Score
+    ───────────┼──────
+         1     │    20
+        10     │    13
+        25     │     9
+        50     │     5
+        75     │     2
+        90     │     1
+       100     │     0
+    """
+    k = 4
+    p = 0.5
+    inverted = 1 - (percentile - 1) / 99
+    curved = inverted**p
+    ranking_bonus = int(20 * (math.exp(k * curved) - 1) / (math.exp(k) - 1))
+    total_reward += ranking_bonus
+
+    return DailyRewardInfo(
+        total_reward=total_reward,
+        base_amount=amount,
+        random_bonus=random_bonus,
+        streak_bonus=streak_bonus,
+        current_streak=current_streak,
+        ranking_bonus=ranking_bonus,
+        user_rank=user_rank,
+        total_entries=total_entries,
+    )
