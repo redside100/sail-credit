@@ -45,7 +45,7 @@ async def fetch_image(
                 response.raise_for_status()
                 content = await response.read()
             return Image.open(io.BytesIO(content)).convert("RGBA")
-        except (aiohttp.ClientError, aiohttp.ServerTimeoutError) as e:
+        except (aiohttp.ClientResponseError, aiohttp.ServerTimeoutError) as e:
             if attempt == max_retries:
                 raise
             wait = 0.2 * (2**attempt)
