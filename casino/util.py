@@ -38,7 +38,7 @@ def mult_to_emoji(mult: float):
 
 async def fetch_image(
     session: aiohttp.ClientSession, url: str, max_retries: int = 3
-) -> Image.Image:
+) -> Image:
     for attempt in range(max_retries + 1):
         try:
             async with session.get(url) as response:
