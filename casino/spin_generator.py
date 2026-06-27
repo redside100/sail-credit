@@ -7,6 +7,8 @@ from typing import List, Optional
 import aiohttp
 from PIL import Image, ImageDraw, ImageOps
 
+from casino.util import fetch_image
+
 
 # ── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,16 +18,6 @@ class Player:
     url: str
     weight: float  # percentage, e.g. 60.0 for 60%
     image: Optional[Image.Image] = None
-
-
-# ── Image fetching ────────────────────────────────────────────────────────────
-
-
-async def _fetch_image(session: aiohttp.ClientSession, url: str) -> Image.Image:
-    async with session.get(url) as response:
-        response.raise_for_status()
-        content = await response.read()
-    return Image.open(io.BytesIO(content)).convert("RGBA")
 
 
 # ── Avatar helpers ────────────────────────────────────────────────────────────
@@ -245,7 +237,7 @@ async def create_jackpot_gif(
     headers = {"User-Agent": "sail-credit/1.0"}
 
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-        images = await asyncio.gather(*[_fetch_image(session, p.url) for p in players])
+        images = await asyncio.gather(*[fetch_image(session, p.url) for p in players])
 
     for player, image in zip(players, images):
         player.image = image

@@ -6,12 +6,7 @@ from typing import Literal, Tuple
 import aiohttp
 from PIL import Image, ImageDraw, ImageOps
 
-
-async def _fetch_image(session: aiohttp.ClientSession, url: str) -> Image.Image:
-    async with session.get(url) as response:
-        response.raise_for_status()
-        content = await response.read()
-    return Image.open(io.BytesIO(content)).convert("RGBA")
+from casino.util import fetch_image
 
 
 def _to_circle(
@@ -163,8 +158,8 @@ async def create_coinflip_gif(
 
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         front, back = await asyncio.gather(
-            _fetch_image(session, front_url),
-            _fetch_image(session, back_url),
+            fetch_image(session, front_url),
+            fetch_image(session, back_url),
         )
 
     return await asyncio.to_thread(

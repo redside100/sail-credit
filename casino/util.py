@@ -1,5 +1,10 @@
+import asyncio
+import io
 from typing import Literal
 import random
+
+from PIL.Image import Image
+import aiohttp
 
 
 def get_log_source(game: str, log_type: Literal["DEBIT", "CREDIT"]):
@@ -29,3 +34,19 @@ def mult_to_emoji(mult: float):
         return "📉"
     else:
         return "🪦"
+
+
+async def fetch_image(
+    session: aiohttp.ClientSession, url: str, max_retries: int = 3
+) -> Image.Image:
+    for attempt in range(max_retries + 1):
+        try:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                content = await response.read()
+            return Image.open(io.BytesIO(content)).convert("RGBA")
+        except (aiohttp.ClientError, aiohttp.ServerTimeoutError) as e:
+            if attempt == max_retries:
+                raise
+            wait = 0.2 * (2**attempt)
+            await asyncio.sleep(wait)
