@@ -3,7 +3,7 @@ import io
 from typing import Literal
 import random
 
-from PIL.Image import Image
+from PIL import Image
 import aiohttp
 
 
