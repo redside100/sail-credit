@@ -5,6 +5,7 @@ import uuid
 from casino.coinflip import Coinflip
 from casino.jackpot import Jackpot
 from casino.models import CasinoGame, CasinoGameAlias, DegenerateGambler
+from casino.util import get_log_source
 from casino.views import CasinoLobbyView
 import db
 from util import create_embed
@@ -32,6 +33,7 @@ class CasinoLobby:
     members: List[DegenerateGambler] = field(default_factory=list)
     started: bool = False
     max_size: Optional[int] = None
+    finished: bool = False
 
     @property
     def size(self) -> int:
@@ -102,7 +104,35 @@ class CasinoPitboss:
 
         async def start(casino_lobby: CasinoLobby):
             casino_lobby.started = True
-            await casino_lobby.game.start(casino_lobby.members)
+
+            try:
+                await casino_lobby.game.start(casino_lobby.members)
+            except Exception:
+                if not casino_lobby.finished:
+                    # Refund all bets if the game fails
+                    for member in casino_lobby.members:
+                        user_data = await db.get_user(member.user_id)
+                        ssc = user_data["sail_credit"]
+                        await db.change_and_log_sail_credit(
+                            member.user_id,
+                            -1,
+                            -1,
+                            -1,
+                            ssc,
+                            ssc + member.bet_amount,
+                            source=get_log_source(
+                                casino_lobby.game.canonical_name, "CREDIT"
+                            ),
+                        )
+                    await self.finish_lobby(casino_lobby)
+                    await casino_lobby.interaction.channel.send(
+                        embed=create_embed(
+                            f"An error occurred during the last **{casino_lobby.game.name}** lobby.\nAll bets have been refunded.",
+                            color=discord.Colour.red(),
+                        ),
+                        view=None,
+                    )
+                raise
 
         self.scheduler.add_job(
             start,
