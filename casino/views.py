@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Callable
 
 import discord
+from casino.consts import MIN_BET_AMOUNT
 from casino.models import DegenerateGambler
 from casino.util import get_log_source
 import db
@@ -112,8 +113,8 @@ class CasinoLobbyView(discord.ui.View):
             )
             return
 
-        if bet_amount < 10:
-            interaction.response.send_message(
+        if bet_amount < MIN_BET_AMOUNT:
+            await interaction.response.send_message(
                 "Invalid bet amount.",
                 ephemeral=True,
             )

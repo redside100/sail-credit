@@ -11,7 +11,7 @@ from casino.models import DegenerateGambler
 import db
 from party import Party, PartyService
 import validators
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 
 from util import (
     create_ssc_graph_url,
@@ -32,6 +32,7 @@ bot = commands.Bot(
 )
 
 party_service: Optional[PartyService] = None
+MAINTENENCE_MODE = False
 
 
 @bot.tree.command(
@@ -56,6 +57,15 @@ async def create_party(
     start_time: Optional[str],
     image_url: Optional[str],
 ):
+    if MAINTENENCE_MODE:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message="The bot is currently in maintenance mode. Please try again later."
+            ),
+            ephemeral=True,
+        )
+        return
+
     created_at = int(time.time())
 
     parsed_start_time = None
@@ -426,6 +436,14 @@ casino_group = app_commands.Group(name="sscasino", description="Gamble your SSC!
 @casino_group.command(name="crash", description="Start a crash lobby.")
 @user_command()
 async def casino_crash(interaction: discord.Interaction):
+    if MAINTENENCE_MODE:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message="The bot is currently in maintenance mode. Please try again later."
+            ),
+            ephemeral=True,
+        )
+        return
     await casino_pitboss.start_lobby("crash", interaction)
 
 
@@ -438,6 +456,15 @@ async def casino_coinflip(
     amount: app_commands.Range[int, 10, 1000],
     choice: Literal["heads", "tails"],
 ):
+
+    if MAINTENENCE_MODE:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message="The bot is currently in maintenance mode. Please try again later."
+            ),
+            ephemeral=True,
+        )
+        return
 
     current_ssc = get_balance(interaction)
     if current_ssc < amount:
@@ -471,6 +498,14 @@ async def casino_coinflip(
 @casino_group.command(name="jackpot", description="Start a jackpot lobby.")
 @user_command()
 async def casino_jackpot(interaction: discord.Interaction):
+    if MAINTENENCE_MODE:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message="The bot is currently in maintenance mode. Please try again later."
+            ),
+            ephemeral=True,
+        )
+        return
     await casino_pitboss.start_lobby("jackpot", interaction)
 
 
@@ -564,6 +599,28 @@ async def daily_ssc(interaction: discord.Interaction):
                 message="You've already claimed your daily reward today. Why don't you try starting a **party?**"
             ),
         )
+
+
+@bot.tree.command(
+    name="maintenance",
+    description="Toggle maintenence mode for the bot. Requires admin privileges!",
+)
+async def maintenence(interaction: discord.Interaction, mode: bool):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            embed=create_embed(message="You need admin priviliges to use this."),
+            ephemeral=True,
+        )
+        return
+
+    global MAINTENENCE_MODE
+    MAINTENENCE_MODE = mode
+    await interaction.response.send_message(
+        embed=create_embed(
+            message=f"Maintenance mode {'enabled' if mode else 'disabled'}."
+        ),
+        ephemeral=True,
+    )
 
 
 @bot.event
