@@ -16,7 +16,7 @@ class SailCreditBureau:
     """
 
     # How much sail credit a user receives for completing a party by default.
-    BASE_REWARD = 20
+    BASE_REWARD = 40
 
     # How much sail credit to deduct from a user for flaking on a party.
     BASE_PENALTY = -200
