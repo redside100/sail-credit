@@ -9,6 +9,7 @@ from discord.ext import commands
 from casino.casino import CasinoLobby, CasinoPitboss
 from casino.models import DegenerateGambler
 import db
+from models import SerializableMessage
 from party import Party, PartyService
 import validators
 from datetime import datetime, timedelta
@@ -103,7 +104,6 @@ async def create_party(
         max_size=max_size,
         description=description,
         created_at=created_at,
-        interaction=interaction,
         start_time=parsed_start_time,
         role_image_url=image_url,
     )
@@ -122,6 +122,8 @@ async def create_party(
 
     # Get the jump URL (message link) for the party for management commands
     message = await interaction.original_response()
+
+    party.message = SerializableMessage.from_message(message)
     party.jump_url = message.jump_url
 
     # Edit in the party embed and view now

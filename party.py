@@ -9,6 +9,7 @@ import discord
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta, timezone
 
+from models import SerializableMessage
 from util import create_embed, disable_buttons_and_stop_view
 
 STARTING_SSC = 1000
@@ -45,7 +46,7 @@ class Party(BaseModel):
     role_image_url: Optional[int] = None
     finished_at: Optional[int] = None
     start_time: Optional[int] = None
-    interaction: Optional[discord.Interaction] = None
+    message: Optional[SerializableMessage] = None
     jump_url: Optional[str] = None
     max_size: int = 5
     status: PartyStatus = PartyStatus.ASSEMBLING
@@ -201,13 +202,10 @@ class PartyService:
         if not party:
             return
 
-        interaction = party.interaction
-        # If for any reason the party doesn't have an interaction instance, do nothing.
-        if not interaction:
+        message = party.message
+        # If for any reason the party doesn't have a message instance, do nothing.
+        if not message:
             return
-
-        # We need to edit/reply to the original message because our auth token for the followup channel may have expired.
-        message = await interaction.original_response()
 
         # we need to refetch this message in order to edit it (auth)
         message = await message.channel.fetch_message(message.id)
