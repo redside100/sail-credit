@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 import discord
 from abc import ABC, abstractmethod
@@ -7,8 +7,7 @@ from typing import Callable, Dict, Any, List, Literal, Optional
 CasinoGameAlias = Literal["crash"]
 
 
-@dataclass
-class DegenerateGambler:
+class DegenerateGambler(BaseModel):
     user_id: int
     bet_amount: int
     avatar_url: str
@@ -17,10 +16,9 @@ class DegenerateGambler:
         return self.user_id
 
 
-@dataclass
-class BetConfig:
+class BetConfig(BaseModel):
     bet_type: Literal["freeform", "fixed"]
-    fixed_bet_amount: int = None
+    fixed_bet_amount: Optional[int] = None
 
 
 class CasinoGame(ABC):

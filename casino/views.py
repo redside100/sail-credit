@@ -142,7 +142,9 @@ class CasinoLobbyView(discord.ui.View):
         else:
             self.lobby.members.append(
                 DegenerateGambler(
-                    user_id, bet_amount, interaction.user.display_avatar.url
+                    user_id=user_id,
+                    bet_amount=bet_amount,
+                    avatar_url=interaction.user.display_avatar.url,
                 )
             )
 

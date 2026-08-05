@@ -1,5 +1,5 @@
 from collections import deque
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field, ConfigDict
 import time
 from typing import Dict, Optional
 from enum import Enum
@@ -27,16 +27,16 @@ class PartyMemberStatus(Enum):
     FLAKED = "FLAKED"
 
 
-@dataclass
-class PartyMember:
+class PartyMember(BaseModel):
     user_id: int
     name: str
     cached_ssc: int
     status: PartyMemberStatus = PartyMemberStatus.NEUTRAL
 
 
-@dataclass
-class Party:
+class Party(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     uuid: UUID
     role: discord.Role
     name: str
@@ -50,8 +50,8 @@ class Party:
     max_size: int = 5
     status: PartyStatus = PartyStatus.ASSEMBLING
     description: str = ""
-    members: list[PartyMember] = field(default_factory=lambda: [])
-    waitlist: deque[PartyMember] = field(default_factory=lambda: deque())
+    members: list[PartyMember] = Field(default_factory=list)
+    waitlist: deque[PartyMember] = Field(default_factory=deque)
 
     @property
     def size(self) -> int:

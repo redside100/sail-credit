@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 import random
 
 import discord
@@ -12,14 +12,12 @@ import db
 from util import create_embed
 
 
-@dataclass
 class CoinFlipGambler(DegenerateGambler):
     choice: Literal["heads", "tails"]
 
 
-@dataclass
-class CoinFlipGameState:
-    members: List[CoinFlipGambler] = field(default_factory=list)
+class CoinFlipGameState(BaseModel):
+    members: List[CoinFlipGambler] = Field(default_factory=list)
     outcome: Optional[Literal["heads", "tails"]] = None
     win_multiplier: float = 1.98
 

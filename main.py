@@ -486,7 +486,9 @@ async def casino_coinflip(
     def on_lobby_create(lobby: CasinoLobby):
         lobby.members.append(
             DegenerateGambler(
-                interaction.user.id, amount, interaction.user.display_avatar.url
+                user_id=interaction.user.id,
+                bet_amount=amount,
+                avatar_url=interaction.user.display_avatar.url,
             )
         )
 

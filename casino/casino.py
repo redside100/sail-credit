@@ -1,6 +1,6 @@
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Any
 import uuid
 from casino.coinflip import Coinflip
 from casino.jackpot import Jackpot
@@ -22,15 +22,16 @@ GAME_MAP: Dict[CasinoGameAlias, type[CasinoGame]] = {
 }
 
 
-@dataclass
-class CasinoLobby:
+class CasinoLobby(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     uuid: uuid.UUID
     name: str
     created_at: int
     start_time: int
     interaction: discord.Interaction
     game: CasinoGame
-    members: List[DegenerateGambler] = field(default_factory=list)
+    members: List[DegenerateGambler] = Field(default_factory=list)
     started: bool = False
     max_size: Optional[int] = None
     finished: bool = False
@@ -149,6 +150,8 @@ class CasinoPitboss:
     async def finish_lobby(self, lobby: CasinoLobby):
         if lobby in self.lobbies:
             self.lobbies.remove(lobby)
+
+        lobby.finished = True
 
         end_time = int(time.time())
         await db.create_casino_lobby_log(

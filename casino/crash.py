@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 import json
 
 import discord
@@ -14,10 +14,9 @@ from util import create_embed, user_interaction_callback
 import time
 
 
-@dataclass
-class CrashGameState:
-    members: List[DegenerateGambler] = field(default_factory=list)
-    cash_outs: Dict[DegenerateGambler, float] = field(default_factory=dict)
+class CrashGameState(BaseModel):
+    members: List[DegenerateGambler] = Field(default_factory=list)
+    cash_outs: Dict[DegenerateGambler, float] = Field(default_factory=dict)
     finished: bool = False
     current_multiplier: float = 1
 
@@ -62,9 +61,9 @@ class CrashView(discord.ui.View):
             await interaction.response.defer()
             return
 
-        self.crash.game_state.cash_outs[crash_member] = (
-            self.crash.game_state.current_multiplier
-        )
+        self.crash.game_state.cash_outs[
+            crash_member
+        ] = self.crash.game_state.current_multiplier
         cash_out_amount = int(
             crash_member.bet_amount * self.crash.game_state.current_multiplier
         )
