@@ -1,5 +1,5 @@
 from collections import deque
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field, ConfigDict
 import time
 from typing import Dict, Optional
 from enum import Enum
@@ -9,6 +9,7 @@ import discord
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta, timezone
 
+from models import SerializableMessage
 from util import create_embed, disable_buttons_and_stop_view
 
 STARTING_SSC = 1000
@@ -27,16 +28,16 @@ class PartyMemberStatus(Enum):
     FLAKED = "FLAKED"
 
 
-@dataclass
-class PartyMember:
+class PartyMember(BaseModel):
     user_id: int
     name: str
     cached_ssc: int
     status: PartyMemberStatus = PartyMemberStatus.NEUTRAL
 
 
-@dataclass
-class Party:
+class Party(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     uuid: UUID
     role: discord.Role
     name: str
@@ -45,13 +46,13 @@ class Party:
     role_image_url: Optional[int] = None
     finished_at: Optional[int] = None
     start_time: Optional[int] = None
-    interaction: Optional[discord.Interaction] = None
+    message: Optional[SerializableMessage] = None
     jump_url: Optional[str] = None
     max_size: int = 5
     status: PartyStatus = PartyStatus.ASSEMBLING
     description: str = ""
-    members: list[PartyMember] = field(default_factory=lambda: [])
-    waitlist: deque[PartyMember] = field(default_factory=lambda: deque())
+    members: list[PartyMember] = Field(default_factory=list)
+    waitlist: deque[PartyMember] = Field(default_factory=deque)
 
     @property
     def size(self) -> int:
@@ -201,13 +202,10 @@ class PartyService:
         if not party:
             return
 
-        interaction = party.interaction
-        # If for any reason the party doesn't have an interaction instance, do nothing.
-        if not interaction:
+        message = party.message
+        # If for any reason the party doesn't have a message instance, do nothing.
+        if not message:
             return
-
-        # We need to edit/reply to the original message because our auth token for the followup channel may have expired.
-        message = await interaction.original_response()
 
         # we need to refetch this message in order to edit it (auth)
         message = await message.channel.fetch_message(message.id)

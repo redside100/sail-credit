@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 import json
 
 import discord
@@ -14,10 +14,9 @@ from util import create_embed, user_interaction_callback
 import time
 
 
-@dataclass
-class CrashGameState:
-    members: List[DegenerateGambler] = field(default_factory=list)
-    cash_outs: Dict[DegenerateGambler, float] = field(default_factory=dict)
+class CrashGameState(BaseModel):
+    members: List[DegenerateGambler] = Field(default_factory=list)
+    cash_outs: Dict[DegenerateGambler, float] = Field(default_factory=dict)
     finished: bool = False
     current_multiplier: float = 1
 
@@ -62,9 +61,9 @@ class CrashView(discord.ui.View):
             await interaction.response.defer()
             return
 
-        self.crash.game_state.cash_outs[crash_member] = (
-            self.crash.game_state.current_multiplier
-        )
+        self.crash.game_state.cash_outs[
+            crash_member
+        ] = self.crash.game_state.current_multiplier
         cash_out_amount = int(
             crash_member.bet_amount * self.crash.game_state.current_multiplier
         )
@@ -86,8 +85,8 @@ class CrashView(discord.ui.View):
 
 
 class Crash(CasinoGame):
-    def __init__(self, interaction: discord.Interaction):
-        super().__init__(interaction)
+    def __init__(self):
+        super().__init__()
         self.name = "🚀 Sail Crash"
         self.canonical_name = "CRASH"
         self.description = "Bet your SSC and cash out before the chart crashes!"
@@ -169,16 +168,14 @@ class Crash(CasinoGame):
             content = f"# {self.name}\n{past_crash_line}\n```{graph}```"
             start_time = time.time()
             if not view_initialized:
-                await self.interaction.edit_original_response(
+                await self.message.edit(
                     embed=self.generate_embed(),
                     content=content,
                     view=CrashView(self),
                 )
                 view_initialized = True
             else:
-                await self.interaction.edit_original_response(
-                    embed=self.generate_embed(), content=content
-                )
+                await self.message.edit(embed=self.generate_embed(), content=content)
 
             if self.game_state.finished:
                 break
@@ -190,9 +187,7 @@ class Crash(CasinoGame):
     async def start(self, members: List[DegenerateGambler]) -> None:
         self.game_state.members = members
         await self.simulate()
-        await self.interaction.edit_original_response(
-            embed=self.generate_embed(), view=None
-        )
+        await self.message.edit(embed=self.generate_embed(), view=None)
         await self.finish()
 
     async def finish(self) -> None:

@@ -1,14 +1,15 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 import discord
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, Any, List, Literal, Optional
 
+from models import SerializableMessage
+
 CasinoGameAlias = Literal["crash"]
 
 
-@dataclass
-class DegenerateGambler:
+class DegenerateGambler(BaseModel):
     user_id: int
     bet_amount: int
     avatar_url: str
@@ -17,25 +18,24 @@ class DegenerateGambler:
         return self.user_id
 
 
-@dataclass
-class BetConfig:
+class BetConfig(BaseModel):
     bet_type: Literal["freeform", "fixed"]
-    fixed_bet_amount: int = None
+    fixed_bet_amount: Optional[int] = None
 
 
 class CasinoGame(ABC):
-    interaction: discord.Interaction
     name: str
     canonical_name: str
     description: str
     lobby_time: int
     embed_details: Dict[str, Any]
+    message: Optional[SerializableMessage] = None
     finish_callback: Optional[Callable] = None
     bet_config: BetConfig
     max_size: Optional[int] = None
 
-    def __init__(self, interaction: discord.Interaction):
-        self.interaction = interaction
+    def __init__(self, message: Optional[SerializableMessage] = None):
+        self.message = message
 
     @abstractmethod
     async def start(self, members: List[DegenerateGambler]):
