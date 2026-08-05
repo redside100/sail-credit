@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_serializer
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional, Any
 import uuid
@@ -8,6 +8,7 @@ from casino.models import CasinoGame, CasinoGameAlias, DegenerateGambler
 from casino.util import get_log_source
 from casino.views import CasinoLobbyView
 import db
+from models import SerializableMessage
 from util import create_embed
 import time
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -29,8 +30,8 @@ class CasinoLobby(BaseModel):
     name: str
     created_at: int
     start_time: int
-    interaction: discord.Interaction
     game: CasinoGame
+    message: Optional[SerializableMessage] = None
     members: List[DegenerateGambler] = Field(default_factory=list)
     started: bool = False
     max_size: Optional[int] = None
@@ -80,7 +81,7 @@ class CasinoPitboss:
                 )
                 return
 
-        initialized_game = game_class(interaction, **kwargs)
+        initialized_game = game_class(**kwargs)
         now = int(time.time())
         start_time = now + initialized_game.lobby_time
         lobby = CasinoLobby(
@@ -89,9 +90,15 @@ class CasinoPitboss:
             game=initialized_game,
             created_at=now,
             start_time=start_time,
-            interaction=interaction,
             max_size=initialized_game.max_size,
         )
+
+        await interaction.response.send_message(
+            embed=lobby.generate_embed(), view=CasinoLobbyView(lobby)
+        )
+        message = await interaction.original_response()
+        lobby.message = SerializableMessage.from_message(message)
+        initialized_game.message = lobby.message
 
         if on_lobby_create:
             on_lobby_create(lobby)
@@ -107,6 +114,8 @@ class CasinoPitboss:
             casino_lobby.started = True
 
             try:
+                if not casino_lobby.message:
+                    raise ValueError("Casino lobby message is None")
                 await casino_lobby.game.start(casino_lobby.members)
             except Exception:
                 if not casino_lobby.finished:
@@ -126,7 +135,7 @@ class CasinoPitboss:
                             ),
                         )
                     await self.finish_lobby(casino_lobby)
-                    await casino_lobby.interaction.channel.send(
+                    await casino_lobby.message.channel.send(
                         embed=create_embed(
                             f"An error occurred during the last **{casino_lobby.game.name}** lobby.\nAll bets have been refunded.",
                             color=discord.Colour.red(),
@@ -141,10 +150,6 @@ class CasinoPitboss:
             args=[lobby],
             run_date=run_date,
             id=str(lobby.uuid),
-        )
-
-        await interaction.response.send_message(
-            embed=lobby.generate_embed(), view=CasinoLobbyView(lobby)
         )
 
     async def finish_lobby(self, lobby: CasinoLobby):

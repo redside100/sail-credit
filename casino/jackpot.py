@@ -32,11 +32,8 @@ class JackpotGameState(BaseModel):
 
 
 class Jackpot(CasinoGame):
-    def __init__(
-        self,
-        interaction: discord.Interaction,
-    ):
-        super().__init__(interaction)
+    def __init__(self):
+        super().__init__()
         self.name = "🎰 Sail Jackpot"
         self.canonical_name = "JACKPOT"
 
@@ -84,7 +81,7 @@ class Jackpot(CasinoGame):
             member_chance = format(member.bet_amount / total_bet_amount * 100, ".2f")
             description += f"- <@{member.user_id}> **({member.bet_amount} SSC)** **({member_chance}%)**\n"
 
-        await self.interaction.edit_original_response(
+        await self.message.edit(
             attachments=[discord.File(gif_bytes, filename="jackpot.gif")],
             embed=create_embed(
                 description,
@@ -116,7 +113,7 @@ class Jackpot(CasinoGame):
                 )
                 end_description += f"- <@{member.user_id}> **(-{member.bet_amount} SSC)** **({member_chance}%)**\n"
 
-        await self.interaction.edit_original_response(
+        await self.message.edit(
             embed=create_embed(
                 f"🏆 <@{winner.user_id}> won with a **{winning_chance}%** chance! **(+{winning_amount} SSC)**\n\n{end_description}",
                 self.name,
@@ -142,7 +139,7 @@ class Jackpot(CasinoGame):
                     source=get_log_source(self.canonical_name, "CREDIT"),
                 )
 
-            await self.interaction.edit_original_response(
+            await self.message.edit(
                 embed=create_embed(
                     f"Not enough players! All bets were refunded.",
                     image_url=self.embed_details["image_url"],

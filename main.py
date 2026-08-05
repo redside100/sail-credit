@@ -495,7 +495,12 @@ async def casino_coinflip(
         )
 
     await casino_pitboss.start_lobby(
-        "coinflip", interaction, on_lobby_create, host_bet=amount, host_choice=choice
+        "coinflip",
+        interaction,
+        on_lobby_create,
+        host_id=interaction.user.id,
+        host_bet=amount,
+        host_choice=choice,
     )
 
 

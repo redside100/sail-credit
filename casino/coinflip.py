@@ -9,6 +9,7 @@ from typing import Dict, List, Literal, Optional
 
 from casino.util import get_log_source
 import db
+from models import SerializableMessage
 from util import create_embed
 
 
@@ -47,16 +48,16 @@ class Coinflip(CasinoGame):
 
     def __init__(
         self,
-        interaction: discord.Interaction,
+        host_id: int,
         host_bet: int = 10,
         host_choice: Literal["heads", "tails"] = "heads",
     ):
-        super().__init__(interaction)
+        super().__init__()
         self.name = "🪙 Sail Coinflip"
         self.canonical_name = "COINFLIP"
-
+        self.host_id = host_id
         self.game_state = CoinFlipGameState()
-        self.description = f"Join a 1v1 coinflip against <@{interaction.user.id}>!\n\nThe winner receives **{int(host_bet * self.game_state.win_multiplier)} SSC**."
+        self.description = f"Join a 1v1 coinflip against <@{self.host_id}>!\n\nThe winner receives **{int(host_bet * self.game_state.win_multiplier)} SSC**."
         self.bet_config = BetConfig(bet_type="fixed", fixed_bet_amount=host_bet)
         self.lobby_time = 15
         self.embed_details = {
@@ -67,6 +68,9 @@ class Coinflip(CasinoGame):
         self.max_size = 2
 
     async def flip(self):
+
+        if not self.message:
+            raise ValueError("Message is not set for Coinflip game.")
 
         winner = random.choice(self.game_state.members)
         loser = [m for m in self.game_state.members if m.user_id != winner.user_id][0]
@@ -91,7 +95,7 @@ class Coinflip(CasinoGame):
         for member in self.game_state.members:
             description += f"- <@{member.user_id}> **({member.bet_amount} SSC)** **({member.choice})**\n"
 
-        await self.interaction.edit_original_response(
+        await self.message.edit(
             attachments=[discord.File(gif_bytes, filename="coinflip.gif")],
             embed=create_embed(
                 description,
@@ -116,7 +120,7 @@ class Coinflip(CasinoGame):
             source=get_log_source(self.canonical_name, "CREDIT"),
         )
 
-        await self.interaction.edit_original_response(
+        await self.message.edit(
             embed=create_embed(
                 f"<@{winner.user_id}> wins! **(+{win_amount} SSC)**\n\nBetter luck next time, <@{loser.user_id}>.",
                 f"{winner.choice.capitalize()}!",
@@ -129,7 +133,7 @@ class Coinflip(CasinoGame):
 
     async def start(self, members: List[DegenerateGambler]) -> None:
         if len(members) == 1:
-            await self.interaction.edit_original_response(
+            await self.message.edit(
                 embed=create_embed(
                     f"<@{members[0].user_id}> No opponent found!",
                     image_url=self.embed_details["image_url"],

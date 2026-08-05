@@ -4,6 +4,8 @@ import discord
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, Any, List, Literal, Optional
 
+from models import SerializableMessage
+
 CasinoGameAlias = Literal["crash"]
 
 
@@ -22,18 +24,18 @@ class BetConfig(BaseModel):
 
 
 class CasinoGame(ABC):
-    interaction: discord.Interaction
     name: str
     canonical_name: str
     description: str
     lobby_time: int
     embed_details: Dict[str, Any]
+    message: Optional[SerializableMessage] = None
     finish_callback: Optional[Callable] = None
     bet_config: BetConfig
     max_size: Optional[int] = None
 
-    def __init__(self, interaction: discord.Interaction):
-        self.interaction = interaction
+    def __init__(self, message: Optional[SerializableMessage] = None):
+        self.message = message
 
     @abstractmethod
     async def start(self, members: List[DegenerateGambler]):
