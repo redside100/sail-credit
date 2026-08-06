@@ -315,7 +315,7 @@ class PartyService:
         parties_restored = 0
         for party in parties:
             # Re-hydrate messages from discord, as the serialized messages only contain IDs
-            hydrated_message = SerializableMessage.initialize_from_state(
+            hydrated_message = await SerializableMessage.initialize_from_state(
                 party.message, client
             )
             if not hydrated_message:

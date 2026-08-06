@@ -167,6 +167,9 @@ class CasinoPitboss:
         )
 
     async def finish_lobby(self, lobby: CasinoLobby):
+        if lobby.finished:
+            return
+
         if lobby in self.lobbies:
             self.lobbies.remove(lobby)
 
@@ -191,7 +194,7 @@ class CasinoPitboss:
                 continue
 
             # Re-hydrate from discord
-            hydrated_message = SerializableMessage.initialize_from_state(
+            hydrated_message = await SerializableMessage.initialize_from_state(
                 lobby.message, client
             )
             if not hydrated_message:
@@ -202,6 +205,8 @@ class CasinoPitboss:
             # Re-create game instance
             lobby.game = GAME_MAP[lobby.game_alias](**lobby.game_kwargs)
             lobby.game.finish_callback = lambda: self.finish_lobby(lobby)
+            lobby.game.message = lobby.message
+
             self.lobbies.append(lobby)
 
             # Re-instantiate views
