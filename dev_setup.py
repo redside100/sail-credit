@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import json
+from state import SerializedState
 
 
 def setup():
@@ -8,6 +10,12 @@ def setup():
     if first_time_db_setup:
         print("Database file not found. Setting it up...")
         open("sail_credit.db", "a").close()
+
+    first_time_state_setup = not os.path.isfile("state.json")
+    if first_time_state_setup:
+        print("State file not found. Setting it up...")
+        with open("state.json", "w+") as f:
+            f.write(SerializedState().model_dump_json(indent=4, ensure_ascii=True))
 
     with open("schema.sql", "r") as f, open("migrations.sql", "r") as m:
         script = f.read()

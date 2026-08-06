@@ -315,17 +315,13 @@ class PartyService:
         parties_restored = 0
         for party in parties:
             # Re-hydrate messages from discord, as the serialized messages only contain IDs
-            channel = client.get_channel(party.message.channel_id)
-            if not channel:
+            hydrated_message = SerializableMessage.initialize_from_state(
+                party.message, client
+            )
+            if not hydrated_message:
                 continue
 
-            try:
-                party.message.discord_message = await channel.fetch_message(
-                    party.message.message_id
-                )
-            except discord.NotFound:
-                continue
-
+            party.message = hydrated_message
             self.parties[party.uuid] = party
 
             # Re-instantiate views for the party message

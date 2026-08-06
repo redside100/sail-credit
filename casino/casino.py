@@ -32,7 +32,7 @@ class CasinoLobby(BaseModel):
     start_time: int
     game_alias: CasinoGameAlias
     game_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    game: Optional[CasinoGame] = Field(exclude=True)
+    game: Optional[CasinoGame] = Field(exclude=True, default=None)
     message: Optional[SerializableMessage] = None
     members: List[DegenerateGambler] = Field(default_factory=list)
     started: bool = False
@@ -62,6 +62,50 @@ class CasinoPitboss:
         self.lobbies: List[CasinoLobby] = []
         self.scheduler = AsyncIOScheduler(timezone="UTC")
         self.scheduler.start()
+
+    async def _start(self, casino_lobby: CasinoLobby):
+        casino_lobby.started = True
+
+        try:
+            if not casino_lobby.message.discord_message:
+                raise ValueError("Casino lobby discord message is None")
+            await casino_lobby.game.start(casino_lobby.members)
+        except Exception:
+            if not casino_lobby.finished:
+                excluded_ids = set()
+                # We should not refund players who have already cashed out in a crash game, as they have already received their winnings
+                if isinstance(casino_lobby.game, Crash):
+                    crash = cast(Crash, casino_lobby.game)
+                    excluded_ids = {
+                        member.user_id for member in crash.game_state.cash_outs
+                    }
+                # Refund all bets if the game fails
+                for member in casino_lobby.members:
+                    if member.user_id in excluded_ids:
+                        continue
+
+                    user_data = await db.get_user(member.user_id)
+                    ssc = user_data["sail_credit"]
+                    await db.change_and_log_sail_credit(
+                        member.user_id,
+                        -1,
+                        -1,
+                        -1,
+                        ssc,
+                        ssc + member.bet_amount,
+                        source=get_log_source(
+                            casino_lobby.game.canonical_name, "CREDIT"
+                        ),
+                    )
+                await self.finish_lobby(casino_lobby)
+                await casino_lobby.message.discord_message.channel.send(
+                    embed=create_embed(
+                        f"An error occurred during the last **{casino_lobby.game.name}** lobby.\nAll bets have been refunded.",
+                        color=discord.Colour.red(),
+                    ),
+                    view=None,
+                )
+            raise
 
     async def start_lobby(
         self,
@@ -114,52 +158,8 @@ class CasinoPitboss:
             seconds=lobby.game.lobby_time
         )
 
-        async def start(casino_lobby: CasinoLobby):
-            casino_lobby.started = True
-
-            try:
-                if not casino_lobby.message.discord_message:
-                    raise ValueError("Casino lobby discord message is None")
-                await casino_lobby.game.start(casino_lobby.members)
-            except Exception:
-                if not casino_lobby.finished:
-                    excluded_ids = set()
-                    # We should not refund players who have already cashed out in a crash game, as they have already received their winnings
-                    if isinstance(casino_lobby.game, Crash):
-                        crash = cast(Crash, casino_lobby.game)
-                        excluded_ids = {
-                            member.user_id for member in crash.game_state.cash_outs
-                        }
-                    # Refund all bets if the game fails
-                    for member in casino_lobby.members:
-                        if member.user_id in excluded_ids:
-                            continue
-
-                        user_data = await db.get_user(member.user_id)
-                        ssc = user_data["sail_credit"]
-                        await db.change_and_log_sail_credit(
-                            member.user_id,
-                            -1,
-                            -1,
-                            -1,
-                            ssc,
-                            ssc + member.bet_amount,
-                            source=get_log_source(
-                                casino_lobby.game.canonical_name, "CREDIT"
-                            ),
-                        )
-                    await self.finish_lobby(casino_lobby)
-                    await casino_lobby.message.discord_message.channel.send(
-                        embed=create_embed(
-                            f"An error occurred during the last **{casino_lobby.game.name}** lobby.\nAll bets have been refunded.",
-                            color=discord.Colour.red(),
-                        ),
-                        view=None,
-                    )
-                raise
-
         self.scheduler.add_job(
-            start,
+            self._start,
             "date",
             args=[lobby],
             run_date=run_date,
@@ -182,6 +182,46 @@ class CasinoPitboss:
         )
 
     async def restore_from_state(
-        self, state: Dict[str, list], client: discord.Client
+        self, lobbies: List[CasinoLobby], client: discord.Client
     ) -> None:
-        pass
+        print("Restoring lobbies from saved state...")
+        lobbies_restored = 0
+        for lobby in lobbies:
+            if lobby.started or lobby.finished:
+                continue
+
+            # Re-hydrate from discord
+            hydrated_message = SerializableMessage.initialize_from_state(
+                lobby.message, client
+            )
+            if not hydrated_message:
+                continue
+
+            lobby.message = hydrated_message
+
+            # Re-create game instance
+            lobby.game = GAME_MAP[lobby.game_alias](**lobby.game_kwargs)
+            lobby.game.finish_callback = lambda: self.finish_lobby(lobby)
+            self.lobbies.append(lobby)
+
+            # Re-instantiate views
+            await lobby.message.discord_message.edit(
+                embed=lobby.generate_embed(), view=CasinoLobbyView(lobby)
+            )
+
+            # Re-schedule start job
+            run_date = datetime.fromtimestamp(lobby.start_time, tz=timezone.utc)
+            if run_date < datetime.now(tz=timezone.utc):
+                run_date = datetime.now(tz=timezone.utc) + timedelta(seconds=1)
+
+            self.scheduler.add_job(
+                self._start,
+                "date",
+                args=[lobby],
+                run_date=run_date,
+                id=str(lobby.uuid),
+            )
+
+            lobbies_restored += 1
+
+        print(f"Restored {lobbies_restored} lobbies from saved state.")

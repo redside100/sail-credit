@@ -22,16 +22,17 @@ class SerializableMessage(BaseModel):
     @staticmethod
     def initialize_from_state(
         serializable_message: "SerializableMessage", client: discord.Client
-    ) -> "SerializableMessage":
+    ) -> Optional["SerializableMessage"]:
         channel = client.get_channel(serializable_message.channel_id)
         if not channel:
-            raise ValueError(
-                f"Channel with ID {serializable_message.channel_id} not found."
-            )
+            return None
 
-        discord_message = channel.fetch_message(serializable_message.message_id)
-        return SerializableMessage(
-            message_id=serializable_message.message_id,
-            channel_id=serializable_message.channel_id,
-            discord_message=discord_message,
-        )
+        try:
+            discord_message = channel.fetch_message(serializable_message.message_id)
+            return SerializableMessage(
+                message_id=serializable_message.message_id,
+                channel_id=serializable_message.channel_id,
+                discord_message=discord_message,
+            )
+        except discord.NotFound:
+            return None
