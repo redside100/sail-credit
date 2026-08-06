@@ -645,10 +645,13 @@ async def on_ready():
     party_service = PartyService()
     global casino_pitboss
     casino_pitboss = CasinoPitboss()
-    await bot.tree.sync()
 
+    # Restore saved state for parties and lobbies
+    await load_state(bot, party_service, casino_pitboss)
     if not autosave.is_running():
         autosave.start()
+
+    await bot.tree.sync()
 
     print("Ready!")
 

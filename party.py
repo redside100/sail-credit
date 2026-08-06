@@ -1,7 +1,7 @@
 from collections import deque
 from pydantic import BaseModel, Field, ConfigDict
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from enum import Enum
 from uuid import UUID, uuid4
 from discord import User, Member
@@ -303,6 +303,51 @@ class PartyService:
             self.scheduler.remove_job(job_id=job_id)
 
     async def restore_from_state(
-        self, state: Dict[str, list], client: discord.Client
+        self, parties: List[Party], client: discord.Client
     ) -> None:
-        pass
+        """
+        Restores the state of the PartyService from a list of parties.
+        """
+        # Locally import here to avoid circular imports.
+        from views import PartyView
+
+        print("Restoring parties from saved state...")
+        parties_restored = 0
+        for party in parties:
+            # Re-hydrate messages from discord, as the serialized messages only contain IDs
+            channel = client.get_channel(party.message.channel_id)
+            if not channel:
+                continue
+
+            try:
+                party.message.discord_message = await channel.fetch_message(
+                    party.message.message_id
+                )
+            except discord.NotFound:
+                continue
+
+            self.parties[party.uuid] = party
+
+            # Re-instantiate views for the party message
+            await party.message.discord_message.edit(
+                embed=create_embed(**party.generate_embed()),
+                view=PartyView(party, self, scheduled=party.start_time is not None),
+            )
+
+            # Re-schedule the start job for the party if it has a start time in the future. If the start time is in the past, we will schedule it instantly
+            if party.start_time:
+                run_date = datetime.fromtimestamp(party.start_time, tz=timezone.utc)
+                if run_date < datetime.now(tz=timezone.utc):
+                    run_date = datetime.now(tz=timezone.utc) + timedelta(seconds=1)
+
+                self.scheduler.add_job(
+                    self._start_scheduled_party,
+                    "date",
+                    args=[party.uuid],
+                    run_date=run_date,
+                    id=str(party.uuid),
+                )
+
+            parties_restored += 1
+
+        print(f"Restored {parties_restored} parties from saved state.")

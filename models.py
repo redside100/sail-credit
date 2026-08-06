@@ -9,7 +9,7 @@ class SerializableMessage(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     message_id: int
     channel_id: int
-    discord_message: Optional[Message] = Field(exclude=True)
+    discord_message: Optional[Message] = Field(exclude=True, default=None)
 
     @staticmethod
     def from_message(message: Message) -> "SerializableMessage":
