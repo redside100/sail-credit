@@ -169,3 +169,6 @@ test_token
 
 # config
 config.py
+
+# state
+state.json

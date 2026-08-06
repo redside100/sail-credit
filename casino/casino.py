@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, ConfigDict, model_serializer
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional, Any
+from typing import Callable, Dict, List, Optional, Any, cast
 import uuid
 from casino.coinflip import Coinflip
 from casino.jackpot import Jackpot
@@ -30,7 +30,9 @@ class CasinoLobby(BaseModel):
     name: str
     created_at: int
     start_time: int
-    game: CasinoGame
+    game_alias: CasinoGameAlias
+    game_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    game: Optional[CasinoGame] = Field(exclude=True)
     message: Optional[SerializableMessage] = None
     members: List[DegenerateGambler] = Field(default_factory=list)
     started: bool = False
@@ -88,6 +90,8 @@ class CasinoPitboss:
             uuid=uuid.uuid4(),
             name=initialized_game.name,
             game=initialized_game,
+            game_alias=game,
+            game_kwargs=kwargs,
             created_at=now,
             start_time=start_time,
             max_size=initialized_game.max_size,
@@ -114,13 +118,23 @@ class CasinoPitboss:
             casino_lobby.started = True
 
             try:
-                if not casino_lobby.message:
-                    raise ValueError("Casino lobby message is None")
+                if not casino_lobby.message.discord_message:
+                    raise ValueError("Casino lobby discord message is None")
                 await casino_lobby.game.start(casino_lobby.members)
             except Exception:
                 if not casino_lobby.finished:
+                    excluded_ids = set()
+                    # We should not refund players who have already cashed out in a crash game, as they have already received their winnings
+                    if isinstance(casino_lobby.game, Crash):
+                        crash = cast(Crash, casino_lobby.game)
+                        excluded_ids = {
+                            member.user_id for member in crash.game_state.cash_outs
+                        }
                     # Refund all bets if the game fails
                     for member in casino_lobby.members:
+                        if member.user_id in excluded_ids:
+                            continue
+
                         user_data = await db.get_user(member.user_id)
                         ssc = user_data["sail_credit"]
                         await db.change_and_log_sail_credit(
@@ -135,7 +149,7 @@ class CasinoPitboss:
                             ),
                         )
                     await self.finish_lobby(casino_lobby)
-                    await casino_lobby.message.channel.send(
+                    await casino_lobby.message.discord_message.channel.send(
                         embed=create_embed(
                             f"An error occurred during the last **{casino_lobby.game.name}** lobby.\nAll bets have been refunded.",
                             color=discord.Colour.red(),
@@ -166,3 +180,8 @@ class CasinoPitboss:
             lobby.game.get_metadata(),
             lobby.game.canonical_name,
         )
+
+    async def restore_from_state(
+        self, state: Dict[str, list], client: discord.Client
+    ) -> None:
+        pass

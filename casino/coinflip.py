@@ -69,7 +69,7 @@ class Coinflip(CasinoGame):
 
     async def flip(self):
 
-        if not self.message:
+        if not self.message.discord_message:
             raise ValueError("Message is not set for Coinflip game.")
 
         winner = random.choice(self.game_state.members)
@@ -95,7 +95,7 @@ class Coinflip(CasinoGame):
         for member in self.game_state.members:
             description += f"- <@{member.user_id}> **({member.bet_amount} SSC)** **({member.choice})**\n"
 
-        await self.message.edit(
+        await self.message.discord_message.edit(
             attachments=[discord.File(gif_bytes, filename="coinflip.gif")],
             embed=create_embed(
                 description,
@@ -120,7 +120,7 @@ class Coinflip(CasinoGame):
             source=get_log_source(self.canonical_name, "CREDIT"),
         )
 
-        await self.message.edit(
+        await self.message.discord_message.edit(
             embed=create_embed(
                 f"<@{winner.user_id}> wins! **(+{win_amount} SSC)**\n\nBetter luck next time, <@{loser.user_id}>.",
                 f"{winner.choice.capitalize()}!",
@@ -133,7 +133,7 @@ class Coinflip(CasinoGame):
 
     async def start(self, members: List[DegenerateGambler]) -> None:
         if len(members) == 1:
-            await self.message.edit(
+            await self.message.discord_message.edit(
                 embed=create_embed(
                     f"<@{members[0].user_id}> No opponent found!",
                     image_url=self.embed_details["image_url"],

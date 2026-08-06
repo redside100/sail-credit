@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from models import SerializableMessage
 from util import create_embed, disable_buttons_and_stop_view
+from discord import Colour
 
 STARTING_SSC = 1000
 
@@ -39,7 +40,8 @@ class Party(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     uuid: UUID
-    role: discord.Role
+    role_id: int
+    role_color: int
     name: str
     owner_id: Optional[int]
     created_at: int
@@ -76,7 +78,7 @@ class Party(BaseModel):
         if self.waitlist:
             content += f"\n{waitlist_string}\n"
 
-        embed_contents = {"message": content, "color": self.role.color}
+        embed_contents = {"message": content, "color": Colour(self.role_color)}
 
         if self.role_image_url:
             embed_contents["image_url"] = self.role_image_url
@@ -154,8 +156,8 @@ class PartyService:
 
         # Pre-processing.
         if party_kwargs.get("name") is None:
-            role = party_kwargs["role"]
-            party_kwargs["name"] = f"{user.display_name}'s <@&{role.id}> Party"
+            role_id = party_kwargs["role_id"]
+            party_kwargs["name"] = f"{user.display_name}'s <@&{role_id}> Party"
 
         party_uuid = uuid4()
 
@@ -202,7 +204,7 @@ class PartyService:
         if not party:
             return
 
-        message = party.message
+        message = party.message.discord_message
         # If for any reason the party doesn't have a message instance, do nothing.
         if not message:
             return
@@ -299,3 +301,8 @@ class PartyService:
         job_id = str(uuid)
         if self.scheduler.get_job(job_id=job_id):
             self.scheduler.remove_job(job_id=job_id)
+
+    async def restore_from_state(
+        self, state: Dict[str, list], client: discord.Client
+    ) -> None:
+        pass
