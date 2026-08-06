@@ -81,7 +81,7 @@ class Jackpot(CasinoGame):
             member_chance = format(member.bet_amount / total_bet_amount * 100, ".2f")
             description += f"- <@{member.user_id}> **({member.bet_amount} SSC)** **({member_chance}%)**\n"
 
-        await self.message.edit(
+        await self.message.discord_message.edit(
             attachments=[discord.File(gif_bytes, filename="jackpot.gif")],
             embed=create_embed(
                 description,
@@ -113,7 +113,7 @@ class Jackpot(CasinoGame):
                 )
                 end_description += f"- <@{member.user_id}> **(-{member.bet_amount} SSC)** **({member_chance}%)**\n"
 
-        await self.message.edit(
+        await self.message.discord_message.edit(
             embed=create_embed(
                 f"🏆 <@{winner.user_id}> won with a **{winning_chance}%** chance! **(+{winning_amount} SSC)**\n\n{end_description}",
                 self.name,
@@ -139,7 +139,7 @@ class Jackpot(CasinoGame):
                     source=get_log_source(self.canonical_name, "CREDIT"),
                 )
 
-            await self.message.edit(
+            await self.message.discord_message.edit(
                 embed=create_embed(
                     f"Not enough players! All bets were refunded.",
                     image_url=self.embed_details["image_url"],

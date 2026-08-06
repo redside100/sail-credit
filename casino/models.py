@@ -1,12 +1,11 @@
 from pydantic import BaseModel
 
-import discord
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, Any, List, Literal, Optional
 
 from models import SerializableMessage
 
-CasinoGameAlias = Literal["crash"]
+CasinoGameAlias = Literal["crash", "coinflip", "jackpot"]
 
 
 class DegenerateGambler(BaseModel):

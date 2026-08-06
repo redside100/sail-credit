@@ -168,14 +168,16 @@ class Crash(CasinoGame):
             content = f"# {self.name}\n{past_crash_line}\n```{graph}```"
             start_time = time.time()
             if not view_initialized:
-                await self.message.edit(
+                await self.message.discord_message.edit(
                     embed=self.generate_embed(),
                     content=content,
                     view=CrashView(self),
                 )
                 view_initialized = True
             else:
-                await self.message.edit(embed=self.generate_embed(), content=content)
+                await self.message.discord_message.edit(
+                    embed=self.generate_embed(), content=content
+                )
 
             if self.game_state.finished:
                 break
@@ -187,7 +189,7 @@ class Crash(CasinoGame):
     async def start(self, members: List[DegenerateGambler]) -> None:
         self.game_state.members = members
         await self.simulate()
-        await self.message.edit(embed=self.generate_embed(), view=None)
+        await self.message.discord_message.edit(embed=self.generate_embed(), view=None)
         await self.finish()
 
     async def finish(self) -> None:

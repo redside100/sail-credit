@@ -1,40 +1,40 @@
 from typing import Optional, cast
 
-import logging
 from discord import Message
 import discord
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class MessageState(BaseModel):
-    id: int
+class SerializableMessage(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    message_id: int
     channel_id: int
+    discord_message: Optional[Message] = Field(exclude=True, default=None)
 
-
-class SerializableMessage(Message):
     @staticmethod
     def from_message(message: Message) -> "SerializableMessage":
-        return cast(SerializableMessage, message)
+        return SerializableMessage(
+            message_id=message.id,
+            channel_id=message.channel.id,
+            discord_message=message,
+        )
 
     @staticmethod
-    async def from_state(
-        data: MessageState, client: discord.Client
+    async def initialize_from_state(
+        serializable_message: "SerializableMessage", client: discord.Client
     ) -> Optional["SerializableMessage"]:
-        try:
-            channel = client.get_channel(data.channel_id)
-            if not channel:
-                logging.warning(
-                    f"Channel {data.channel_id} not found for message {data.id}"
-                )
-                return None
-
-            message = await channel.fetch_message(data.id)
-            return cast(SerializableMessage, message)
-        except discord.NotFound:
-            logging.warning(
-                f"Message with ID {data.id} not found in channel {data.channel_id}"
-            )
+        channel = client.get_channel(serializable_message.channel_id)
+        if not channel:
             return None
 
-    def to_state(self) -> MessageState:
-        return MessageState(id=self.id, channel_id=self.channel.id)
+        try:
+            discord_message = await channel.fetch_message(
+                serializable_message.message_id
+            )
+            return SerializableMessage(
+                message_id=serializable_message.message_id,
+                channel_id=serializable_message.channel_id,
+                discord_message=discord_message,
+            )
+        except discord.NotFound:
+            return None

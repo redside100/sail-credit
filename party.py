@@ -1,7 +1,7 @@
 from collections import deque
 from pydantic import BaseModel, Field, ConfigDict
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from enum import Enum
 from uuid import UUID, uuid4
 from discord import User, Member
@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from models import SerializableMessage
 from util import create_embed, disable_buttons_and_stop_view
+from discord import Colour
 
 STARTING_SSC = 1000
 
@@ -39,7 +40,8 @@ class Party(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     uuid: UUID
-    role: discord.Role
+    role_id: int
+    role_color: int
     name: str
     owner_id: Optional[int]
     created_at: int
@@ -76,7 +78,7 @@ class Party(BaseModel):
         if self.waitlist:
             content += f"\n{waitlist_string}\n"
 
-        embed_contents = {"message": content, "color": self.role.color}
+        embed_contents = {"message": content, "color": Colour(self.role_color)}
 
         if self.role_image_url:
             embed_contents["image_url"] = self.role_image_url
@@ -154,8 +156,8 @@ class PartyService:
 
         # Pre-processing.
         if party_kwargs.get("name") is None:
-            role = party_kwargs["role"]
-            party_kwargs["name"] = f"{user.display_name}'s <@&{role.id}> Party"
+            role_id = party_kwargs["role_id"]
+            party_kwargs["name"] = f"{user.display_name}'s <@&{role_id}> Party"
 
         party_uuid = uuid4()
 
@@ -202,7 +204,7 @@ class PartyService:
         if not party:
             return
 
-        message = party.message
+        message = party.message.discord_message
         # If for any reason the party doesn't have a message instance, do nothing.
         if not message:
             return
@@ -299,3 +301,49 @@ class PartyService:
         job_id = str(uuid)
         if self.scheduler.get_job(job_id=job_id):
             self.scheduler.remove_job(job_id=job_id)
+
+    async def restore_from_state(
+        self, parties: List[Party], client: discord.Client
+    ) -> None:
+        """
+        Restores the state of the PartyService from a list of parties.
+        """
+        # Locally import here to avoid circular imports.
+        from views import PartyView
+
+        print("Restoring parties from saved state...")
+        parties_restored = 0
+        for party in parties:
+            # Re-hydrate messages from discord, as the serialized messages only contain IDs
+            hydrated_message = await SerializableMessage.initialize_from_state(
+                party.message, client
+            )
+            if not hydrated_message:
+                continue
+
+            party.message = hydrated_message
+            self.parties[party.uuid] = party
+
+            # Re-instantiate views for the party message
+            await party.message.discord_message.edit(
+                embed=create_embed(**party.generate_embed()),
+                view=PartyView(party, self, scheduled=party.start_time is not None),
+            )
+
+            # Re-schedule the start job for the party if it has a start time in the future. If the start time is in the past, we will schedule it instantly
+            if party.start_time:
+                run_date = datetime.fromtimestamp(party.start_time, tz=timezone.utc)
+                if run_date < datetime.now(tz=timezone.utc):
+                    run_date = datetime.now(tz=timezone.utc) + timedelta(seconds=1)
+
+                self.scheduler.add_job(
+                    self._start_scheduled_party,
+                    "date",
+                    args=[party.uuid],
+                    run_date=run_date,
+                    id=str(party.uuid),
+                )
+
+            parties_restored += 1
+
+        print(f"Restored {parties_restored} parties from saved state.")

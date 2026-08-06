@@ -5,7 +5,7 @@ from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 from discord import app_commands
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from casino.casino import CasinoLobby, CasinoPitboss
 from casino.models import DegenerateGambler
 import db
@@ -14,6 +14,7 @@ from party import Party, PartyService
 import validators
 from datetime import datetime, timedelta
 
+from state import save_state, load_state
 from util import (
     create_ssc_graph_url,
     divide_chunks,
@@ -99,7 +100,8 @@ async def create_party(
     party: Party = party_service.create_party(
         user=interaction.user,
         user_ssc=get_balance(interaction),
-        role=role,
+        role_id=role.id,
+        role_color=role.color.value,
         name=name,
         max_size=max_size,
         description=description,
@@ -632,12 +634,23 @@ async def maintenence(interaction: discord.Interaction, mode: bool):
     )
 
 
+@tasks.loop(minutes=1)
+async def autosave():
+    await save_state(party_service, casino_pitboss)
+
+
 @bot.event
 async def on_ready():
     global party_service
     party_service = PartyService()
     global casino_pitboss
     casino_pitboss = CasinoPitboss()
+
+    # Restore saved state for parties and lobbies
+    await load_state(bot, party_service, casino_pitboss)
+    if not autosave.is_running():
+        autosave.start()
+
     await bot.tree.sync()
 
     print("Ready!")
@@ -649,6 +662,7 @@ def patch_close():
 
     async def new_close(*args, **kwargs):
         await db.cleanup()
+        await save_state(party_service, casino_pitboss)
         await original_close_fn(*args, **kwargs)
 
     bot.close = new_close
