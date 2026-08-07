@@ -45,7 +45,7 @@ class Party(BaseModel):
     name: str
     owner_id: Optional[int]
     created_at: int
-    role_image_url: Optional[int] = None
+    role_image_url: Optional[str] = None
     finished_at: Optional[int] = None
     start_time: Optional[int] = None
     message: Optional[SerializableMessage] = None
