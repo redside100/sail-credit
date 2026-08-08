@@ -120,7 +120,7 @@ class PartyView(discord.ui.View):
             + ", ".join(party_mentions)
             + ".",
             embed=create_embed(
-                f"<@{self.party.owner_id}> started the party for <@&{self.party.role.id}>!\n\n{report_msg}"
+                f"<@{self.party.owner_id}> started the party for <@&{self.party.role_id}>!\n\n{report_msg}"
             ),
             view=next_view,
         )
