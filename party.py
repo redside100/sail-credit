@@ -257,7 +257,7 @@ class PartyService:
             + ", ".join(party_mentions)
             + ".",
             embed=create_embed(
-                f"The party was started **automatically** for <@&{party.role.id}>!\n\n{report_msg}"
+                f"The party was started **automatically** for <@&{party.role_id}>!\n\n{report_msg}"
             ),
             view=next_view,
         )
