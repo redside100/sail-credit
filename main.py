@@ -723,6 +723,20 @@ async def vct_bet(
         )
         return
 
+    # Prevent betting on both teams for the same match
+    existing_bets = await db.get_user_pending_bets_for_match(interaction.user.id, match_id)
+    if existing_bets:
+        existing_pick = existing_bets[0]["team_pick"]
+        if existing_pick != team:
+            other_team = match.team1_name if existing_pick == "team1" else match.team2_name
+            await interaction.response.send_message(
+                embed=create_embed(
+                    message=f"You already have a pending bet on **{other_team}** for this match! You can't bet on both teams."
+                ),
+                ephemeral=True,
+            )
+            return
+
     odds = match.team1_odds if team == "team1" else match.team2_odds
     if odds is None:
         await interaction.response.send_message(
@@ -805,42 +819,6 @@ async def vct_leaderboard(interaction: discord.Interaction):
         embed=create_embed(
             title="🏆 VCT Betting Leaderboard",
             message="\n".join(lines),
-        ),
-    )
-
-
-@vct_group.command(name="odds", description="Refresh and view live odds for a specific match.")
-@app_commands.describe(match_id="The match ID to check odds for.")
-@user_command()
-async def vct_odds(interaction: discord.Interaction, match_id: int):
-    if not vct_service:
-        await interaction.response.send_message(
-            embed=create_embed(message="VCT service is not ready yet."),
-            ephemeral=True,
-        )
-        return
-
-    await interaction.response.defer()
-
-    match = await vct_service.refresh_odds(match_id)
-    if not match:
-        await interaction.followup.send(
-            embed=create_embed(message=f"Match `{match_id}` not found!"),
-            ephemeral=True,
-        )
-        return
-
-    odds1 = f"{match.team1_odds:.2f}" if match.team1_odds else "N/A"
-    odds2 = f"{match.team2_odds:.2f}" if match.team2_odds else "N/A"
-
-    await interaction.followup.send(
-        embed=create_embed(
-            title=f"📊 Live Odds — {match.team1_name} vs {match.team2_name}",
-            message=(
-                f"**{match.team1_name}**: {odds1}\n"
-                f"**{match.team2_name}**: {odds2}\n\n"
-                f"Use `/vct bet {match_id} team1 <amount>` or `/vct bet {match_id} team2 <amount>` to place a bet!"
-            ),
         ),
     )
 
