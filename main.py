@@ -685,8 +685,7 @@ async def vct_matches(interaction: discord.Interaction):
         return
 
     pages = build_matches_pages(matches)
-    view = MessageBook(interaction.user.id, pages) if len(pages) > 1 else None
-    await interaction.followup.send(embed=pages[0], view=view)
+    await interaction.followup.send(embed=pages[0], view=MessageBook(interaction.user.id, pages))
 
 
 @vct_group.command(name="bet", description="Bet SSC on a VCT match.")
@@ -775,27 +774,18 @@ async def vct_bet(
 @user_command()
 async def vct_bets(interaction: discord.Interaction):
     bets = await db.get_user_vct_bets(interaction.user.id)
-    if not bets:
-        await interaction.response.send_message(
-            embed=create_embed(
-                title="🎰 Your VCT Bets",
-                message="You haven't placed any VCT bets yet! Use `/vct matches` to see available matches.",
-            ),
-            ephemeral=True,
-        )
-        return
 
     # Build a match lookup dict
-    match_ids = set(b["match_id"] for b in bets)
     matches_dict = {}
-    for mid in match_ids:
-        m = await db.get_vct_match(mid)
-        if m:
-            matches_dict[mid] = m
+    if bets:
+        match_ids = set(b["match_id"] for b in bets)
+        for mid in match_ids:
+            m = await db.get_vct_match(mid)
+            if m:
+                matches_dict[mid] = m
 
     pages = build_user_bets_pages(bets, matches_dict)
-    view = MessageBook(interaction.user.id, pages) if len(pages) > 1 else None
-    await interaction.response.send_message(embed=pages[0], view=view)
+    await interaction.response.send_message(embed=pages[0], view=MessageBook(interaction.user.id, pages))
 
 
 @vct_group.command(name="leaderboard", description="VCT betting leaderboard — who's profited the most?")
