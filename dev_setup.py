@@ -28,7 +28,21 @@ def setup():
 
     print("Running migrations...")
     # Always run migrations
-    db.cursor().executescript(migrations)
+    cursor = db.cursor()
+    log_columns = {
+        row[1] for row in cursor.execute("PRAGMA table_info(sail_credit_log)")
+    }
+    if "season_id" not in log_columns:
+        print("Migration: adding season_id to sail_credit_log...")
+        cursor.execute("ALTER TABLE sail_credit_log ADD COLUMN season_id INTEGER")
+    cursor.executescript(migrations)
+    log_columns = {
+        row[1] for row in cursor.execute("PRAGMA table_info(sail_credit_log)")
+    }
+    if "season_id" not in log_columns:
+        raise RuntimeError(
+            "Database migration failed: sail_credit_log has no season_id column"
+        )
 
     db.commit()
     db.close()

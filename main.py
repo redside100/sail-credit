@@ -10,7 +10,7 @@ from casino.casino import CasinoLobby, CasinoPitboss
 from casino.models import DegenerateGambler
 import db
 from models import SerializableMessage
-from party import Party, PartyService
+from party import Party, PartyService, STARTING_SSC
 import validators
 from datetime import datetime, timedelta
 
@@ -20,11 +20,18 @@ from util import (
     divide_chunks,
     get_daily_reward,
     get_scheduled_datetime_from_string,
+    get_season_emoji,
     user_command,
     create_embed,
     get_balance,
 )
-from views import LeaderboardView, MessageBook, PartyView, TopupView
+from views import (
+    LeaderboardView,
+    MessageBook,
+    PartyView,
+    SeasonResetConfirmationView,
+    TopupView,
+)
 
 intents = discord.Intents.default()
 bot = commands.Bot(
@@ -247,6 +254,98 @@ async def leaderboard(interaction: discord.Interaction):
     )
 
 
+season_group = app_commands.Group(name="season", description="Season commands.")
+
+
+@season_group.command(
+    name="history",
+    description="View your highest SSC and rank for each season.",
+)
+@user_command()
+async def season_history(interaction: discord.Interaction):
+    history = await db.get_user_season_history(interaction.user.id)
+    if not history:
+        pages = [
+            create_embed(
+                title="Season History",
+                message="You don't have any season history yet.",
+            )
+        ]
+    else:
+        pages = []
+        for chunk in divide_chunks(history, 5):
+            entries = []
+            for season in chunk:
+                highest_ssc = season["highest_sail_credit"]
+                season_emoji = get_season_emoji(highest_ssc)
+                rank = (
+                    f"#{season['highest_rank']}"
+                    if season["highest_rank"] is not None
+                    else "Not available"
+                )
+                end = (
+                    f" (ended <t:{season['end_timestamp']}:D>)"
+                    if season["end_timestamp"] is not None
+                    else " (in progress)"
+                )
+                entries.append(
+                    f"**Season {season['season_id']}**{end}\n"
+                    f"Highest SSC: **{highest_ssc}** {season_emoji}\n"
+                    f"Season rank: **{rank}**"
+                )
+            pages.append(
+                create_embed(title="Season History", message="\n\n".join(entries))
+            )
+
+    await interaction.response.send_message(
+        embed=pages[0],
+        view=MessageBook(user_id=interaction.user.id, pages=pages),
+    )
+
+
+@season_group.command(
+    name="leaderboard",
+    description="View the highest SSC leaderboard for a season.",
+)
+@app_commands.describe(season_id="The season number to view.")
+@user_command()
+async def season_leaderboard(interaction: discord.Interaction, season_id: int):
+    leaderboard = await db.get_season_leaderboard(season_id)
+    if not leaderboard:
+        await interaction.response.send_message(
+            embed=create_embed(
+                title=f"Season {season_id} Leaderboard",
+                message="No leaderboard entries found for that season.",
+            ),
+        )
+        return
+
+    pages = []
+    season = leaderboard[0]
+    season_period = (
+        f"Season ended <t:{season['end_timestamp']}:F>"
+        if season["end_timestamp"] is not None
+        else "Season in progress"
+    )
+    for chunk in divide_chunks(leaderboard, 10):
+        entries = [
+            f"**#{entry['season_rank']}** {get_season_emoji(entry['highest_sail_credit'])} "
+            f"<@{entry['discord_id']}> ({entry['highest_sail_credit']} SSC)"
+            for entry in chunk
+        ]
+        pages.append(
+            create_embed(
+                title=f"Season {season_id} Leaderboard",
+                message=f"{season_period}\n\n" + "\n".join(entries),
+            )
+        )
+
+    await interaction.response.send_message(
+        embed=pages[0],
+        view=MessageBook(user_id=interaction.user.id, pages=pages),
+    )
+
+
 @bot.tree.command(
     name="ssc-graph", description="Check a graph of your SSC over a time period!"
 )
@@ -383,6 +482,33 @@ async def adjust_ssc(interaction: discord.Interaction, user: discord.User, delta
         ),
     )
     return
+
+
+@season_group.command(
+    name="new",
+    description="Create a new SSC season and reset all users' balances.",
+)
+@user_command()
+async def new_season(interaction: discord.Interaction):
+    if not isinstance(interaction.user, discord.Member):
+        await interaction.response.send_message(
+            "This command can only be used in a server.", ephemeral=True
+        )
+        return
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "You need administrator privileges to start a season.", ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message(
+        f"Start a new season and reset every user's SSC to {STARTING_SSC}? This cannot be undone.",
+        view=SeasonResetConfirmationView(interaction.user.id),
+        ephemeral=True,
+    )
+
+
+bot.tree.add_command(season_group)
 
 
 @bot.tree.command(
