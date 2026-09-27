@@ -11,6 +11,14 @@ from casino.models import DegenerateGambler
 import db
 from models import SerializableMessage
 from party import Party, PartyService, STARTING_SSC
+from vct.betting import VCTBettingService, MIN_BET
+from vct.views import (
+    MatchListView,
+    BetUserBetsView,
+    create_matches_embed,
+    create_bet_confirm_embed,
+    create_user_bets_embed,
+)
 import validators
 from datetime import datetime, timedelta
 
@@ -649,6 +657,217 @@ async def casino_jackpot(interaction: discord.Interaction):
 bot.tree.add_command(casino_group)
 
 
+# --- VCT Betting ---
+
+vct_group = app_commands.Group(name="vct", description="Bet on VCT Champions matches!")
+
+vct_service: Optional[VCTBettingService] = None
+
+
+@vct_group.command(name="matches", description="View upcoming VCT Champions matches and odds.")
+@user_command()
+async def vct_matches(interaction: discord.Interaction):
+    if not vct_service:
+        await interaction.response.send_message(
+            embed=create_embed(message="VCT service is not ready yet. Try again in a moment!"),
+            ephemeral=True,
+        )
+        return
+
+    matches = vct_service.get_all_matches()
+    if not matches:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message="No VCT matches found. The bot may still be loading data from VLR.gg — try again in a minute!"
+            ),
+            ephemeral=True,
+        )
+        return
+
+    embed = create_matches_embed(matches)
+    view = MatchListView(interaction.user.id, matches) if len(matches) > 5 else None
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@vct_group.command(name="bet", description="Bet SSC on a VCT match.")
+@app_commands.describe(
+    match_id="The match ID (shown in /vct matches).",
+    team="Which team to bet on (team1 = left, team2 = right in /vct matches).",
+    amount="Amount of SSC to bet (minimum 10, no upper limit).",
+)
+@user_command()
+async def vct_bet(
+    interaction: discord.Interaction,
+    match_id: int,
+    team: Literal["team1", "team2"],
+    amount: app_commands.Range[int, 10],
+):
+    if not vct_service:
+        await interaction.response.send_message(
+            embed=create_embed(message="VCT service is not ready yet. Try again in a moment!"),
+            ephemeral=True,
+        )
+        return
+
+    match = vct_service.get_match(match_id)
+    if not match:
+        await interaction.response.send_message(
+            embed=create_embed(message=f"Match `{match_id}` not found! Use `/vct matches` to see available matches."),
+            ephemeral=True,
+        )
+        return
+
+    if match.status not in ("upcoming", "live"):
+        await interaction.response.send_message(
+            embed=create_embed(message="This match is no longer open for betting!"),
+            ephemeral=True,
+        )
+        return
+
+    odds = match.team1_odds if team == "team1" else match.team2_odds
+    if odds is None:
+        await interaction.response.send_message(
+            embed=create_embed(message="Odds are not available for this match yet. Try again later!"),
+            ephemeral=True,
+        )
+        return
+
+    current_ssc = interaction.data["user_data"]["sail_credit"]
+    if current_ssc < amount:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message=f"You don't have enough SSC! You have **{current_ssc} SSC** but tried to bet **{amount} SSC**."
+            ),
+            ephemeral=True,
+        )
+        return
+
+    bet = await vct_service.place_bet(
+        discord_id=interaction.user.id,
+        match_id=match_id,
+        team_pick=team,
+        amount=amount,
+    )
+
+    if not bet:
+        await interaction.response.send_message(
+            embed=create_embed(message="Something went wrong placing your bet. Please try again!"),
+            ephemeral=True,
+        )
+        return
+
+    new_balance = current_ssc - amount
+    team_name = match.team1_name if team == "team1" else match.team2_name
+
+    await interaction.response.send_message(
+        embed=create_bet_confirm_embed(
+            match=match,
+            team_pick=team,
+            amount=amount,
+            odds=bet.odds_at_bet,
+            potential_payout=bet.potential_payout,
+            new_balance=new_balance,
+        ),
+    )
+
+
+@vct_group.command(name="bets", description="View your VCT betting history.")
+@user_command()
+async def vct_bets(interaction: discord.Interaction):
+    bets = await db.get_user_vct_bets(interaction.user.id)
+    if not bets:
+        await interaction.response.send_message(
+            embed=create_embed(
+                title="🎰 Your VCT Bets",
+                message="You haven't placed any VCT bets yet! Use `/vct matches` to see available matches.",
+            ),
+            ephemeral=True,
+        )
+        return
+
+    # Build a match lookup dict
+    match_ids = set(b["match_id"] for b in bets)
+    matches_dict = {}
+    for mid in match_ids:
+        m = await db.get_vct_match(mid)
+        if m:
+            matches_dict[mid] = m
+
+    embed = create_user_bets_embed(bets, matches_dict)
+    view = BetUserBetsView(interaction.user.id, bets, matches_dict) if len(bets) > 8 else None
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@vct_group.command(name="leaderboard", description="VCT betting leaderboard — who's profited the most?")
+@user_command()
+async def vct_leaderboard(interaction: discord.Interaction):
+    rows = await db.get_vct_betting_leaderboard()
+    if not rows:
+        await interaction.response.send_message(
+            embed=create_embed(
+                title="🏆 VCT Betting Leaderboard",
+                message="No resolved bets yet!",
+            ),
+        )
+        return
+
+    lines = []
+    for i, row in enumerate(rows[:15]):
+        rank = i + 1
+        net = int(row["net_profit"])
+        sign = "+" if net >= 0 else ""
+        lines.append(
+            f"**#{rank}** <@{row['discord_id']}> — {sign}{net} SSC "
+            f"({row['wins']}W/{row['losses']}L, {int(row['total_wagered'])} wagered)"
+        )
+
+    await interaction.response.send_message(
+        embed=create_embed(
+            title="🏆 VCT Betting Leaderboard",
+            message="\n".join(lines),
+        ),
+    )
+
+
+@vct_group.command(name="odds", description="Refresh and view live odds for a specific match.")
+@app_commands.describe(match_id="The match ID to check odds for.")
+@user_command()
+async def vct_odds(interaction: discord.Interaction, match_id: int):
+    if not vct_service:
+        await interaction.response.send_message(
+            embed=create_embed(message="VCT service is not ready yet."),
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.defer()
+
+    match = await vct_service.refresh_odds(match_id)
+    if not match:
+        await interaction.followup.send(
+            embed=create_embed(message=f"Match `{match_id}` not found!"),
+            ephemeral=True,
+        )
+        return
+
+    odds1 = f"{match.team1_odds:.2f}" if match.team1_odds else "N/A"
+    odds2 = f"{match.team2_odds:.2f}" if match.team2_odds else "N/A"
+
+    await interaction.followup.send(
+        embed=create_embed(
+            title=f"📊 Live Odds — {match.team1_name} vs {match.team2_name}",
+            message=(
+                f"**{match.team1_name}**: {odds1}\n"
+                f"**{match.team2_name}**: {odds2}\n\n"
+                f"Use `/vct bet {match_id} team1 <amount>` or `/vct bet {match_id} team2 <amount>` to place a bet!"
+            ),
+        ),
+    )
+
+
+bot.tree.add_command(vct_group)
+
+
 @bot.tree.command(
     name="beg",
     description="Request a top up to your balance.",
@@ -776,6 +995,10 @@ async def on_ready():
     await load_state(bot, party_service, casino_pitboss)
     if not autosave.is_running():
         autosave.start()
+
+    global vct_service
+    vct_service = VCTBettingService()
+    await vct_service.start()
 
     await bot.tree.sync()
 

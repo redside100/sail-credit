@@ -391,3 +391,156 @@ async def get_daily_reward_streak(user_id: int) -> int:
                 break
 
         return streak
+
+
+# --- VCT Betting ---
+
+
+async def upsert_vct_match(
+    match_id: int,
+    team1_name: str,
+    team2_name: str,
+    team1_odds: Optional[float],
+    team2_odds: Optional[float],
+    scheduled_time: Optional[int],
+    status: str,
+    winner: Optional[str],
+    team1_score: Optional[int],
+    team2_score: Optional[int],
+    event_name: str,
+    match_url: str,
+    last_updated: int,
+) -> None:
+    await db.execute(
+        """INSERT INTO vct_matches
+            (match_id, team1_name, team2_name, team1_odds, team2_odds,
+             scheduled_time, status, winner, team1_score, team2_score,
+             event_name, match_url, last_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(match_id) DO UPDATE SET
+             team1_name=excluded.team1_name,
+             team2_name=excluded.team2_name,
+             team1_odds=excluded.team1_odds,
+             team2_odds=excluded.team2_odds,
+             scheduled_time=excluded.scheduled_time,
+             status=excluded.status,
+             winner=excluded.winner,
+             team1_score=excluded.team1_score,
+             team2_score=excluded.team2_score,
+             event_name=excluded.event_name,
+             match_url=excluded.match_url,
+             last_updated=excluded.last_updated
+        """,
+        (
+            match_id,
+            team1_name,
+            team2_name,
+            team1_odds,
+            team2_odds,
+            scheduled_time,
+            status,
+            winner,
+            team1_score,
+            team2_score,
+            event_name,
+            match_url,
+            last_updated,
+        ),
+    )
+    await db.commit()
+
+
+async def get_vct_matches(status: Optional[str] = None) -> List[Dict[str, Any]]:
+    if status:
+        async with db.execute(
+            "SELECT * FROM vct_matches WHERE status = ? ORDER BY match_id ASC",
+            (status,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+    async with db.execute(
+        "SELECT * FROM vct_matches ORDER BY match_id ASC"
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def get_vct_match(match_id: int) -> Optional[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT * FROM vct_matches WHERE match_id = ?", (match_id,)
+    ) as cursor:
+        return await cursor.fetchone()
+
+
+async def create_vct_bet(
+    discord_id: int,
+    match_id: int,
+    team_pick: str,
+    amount: int,
+    odds_at_bet: float,
+    potential_payout: float,
+    placed_at: int,
+) -> int:
+    cursor = await db.execute(
+        """INSERT INTO vct_bets
+            (discord_id, match_id, team_pick, amount, odds_at_bet,
+             potential_payout, status, placed_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+        """,
+        (discord_id, match_id, team_pick, amount, odds_at_bet, potential_payout, placed_at),
+    )
+    await db.commit()
+    return cursor.lastrowid
+
+
+async def get_user_vct_bets(discord_id: int) -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT * FROM vct_bets WHERE discord_id = ? ORDER BY placed_at DESC",
+        (discord_id,),
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def get_pending_vct_bets(match_id: int) -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT * FROM vct_bets WHERE match_id = ? AND status = 'pending'",
+        (match_id,),
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def resolve_vct_bet(bet_id: int, status: str, resolved_at: int) -> None:
+    await db.execute(
+        "UPDATE vct_bets SET status = ?, resolved_at = ? WHERE id = ?",
+        (status, resolved_at, bet_id),
+    )
+    await db.commit()
+
+
+async def get_vct_betting_leaderboard() -> List[Dict[str, Any]]:
+    """Get users ranked by net VCT betting profit."""
+    async with db.execute(
+        """SELECT
+               discord_id,
+               SUM(CASE WHEN status = 'won' THEN potential_payout ELSE 0 END) as total_won,
+               SUM(amount) as total_wagered,
+               SUM(CASE WHEN status = 'won' THEN potential_payout ELSE 0 END) - SUM(amount) as net_profit,
+               COUNT(*) as total_bets,
+               SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) as wins,
+               SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as losses
+           FROM vct_bets
+           WHERE status IN ('won', 'lost')
+           GROUP BY discord_id
+           ORDER BY net_profit DESC
+        """
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def get_user_pending_bets_for_match(
+    discord_id: int, match_id: int
+) -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT * FROM vct_bets WHERE discord_id = ? AND match_id = ? AND status = 'pending'",
+        (discord_id, match_id),
+    ) as cursor:
+        return await cursor.fetchall()
