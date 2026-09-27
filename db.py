@@ -396,84 +396,11 @@ async def get_daily_reward_streak(user_id: int) -> int:
 # --- VCT Betting ---
 
 
-async def upsert_vct_match(
-    match_id: int,
-    team1_name: str,
-    team2_name: str,
-    team1_odds: Optional[float],
-    team2_odds: Optional[float],
-    scheduled_time: Optional[int],
-    status: str,
-    winner: Optional[str],
-    team1_score: Optional[int],
-    team2_score: Optional[int],
-    event_name: str,
-    match_url: str,
-    last_updated: int,
-) -> None:
-    await db.execute(
-        """INSERT INTO vct_matches
-            (match_id, team1_name, team2_name, team1_odds, team2_odds,
-             scheduled_time, status, winner, team1_score, team2_score,
-             event_name, match_url, last_updated)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(match_id) DO UPDATE SET
-             team1_name=excluded.team1_name,
-             team2_name=excluded.team2_name,
-             team1_odds=excluded.team1_odds,
-             team2_odds=excluded.team2_odds,
-             scheduled_time=excluded.scheduled_time,
-             status=excluded.status,
-             winner=excluded.winner,
-             team1_score=excluded.team1_score,
-             team2_score=excluded.team2_score,
-             event_name=excluded.event_name,
-             match_url=excluded.match_url,
-             last_updated=excluded.last_updated
-        """,
-        (
-            match_id,
-            team1_name,
-            team2_name,
-            team1_odds,
-            team2_odds,
-            scheduled_time,
-            status,
-            winner,
-            team1_score,
-            team2_score,
-            event_name,
-            match_url,
-            last_updated,
-        ),
-    )
-    await db.commit()
-
-
-async def get_vct_matches(status: Optional[str] = None) -> List[Dict[str, Any]]:
-    if status:
-        async with db.execute(
-            "SELECT * FROM vct_matches WHERE status = ? ORDER BY match_id ASC",
-            (status,),
-        ) as cursor:
-            return await cursor.fetchall()
-
-    async with db.execute(
-        "SELECT * FROM vct_matches ORDER BY match_id ASC"
-    ) as cursor:
-        return await cursor.fetchall()
-
-
-async def get_vct_match(match_id: int) -> Optional[Dict[str, Any]]:
-    async with db.execute(
-        "SELECT * FROM vct_matches WHERE match_id = ?", (match_id,)
-    ) as cursor:
-        return await cursor.fetchone()
-
-
 async def create_vct_bet(
     discord_id: int,
     match_id: int,
+    team1_name: str,
+    team2_name: str,
     team_pick: str,
     amount: int,
     odds_at_bet: float,
@@ -482,11 +409,11 @@ async def create_vct_bet(
 ) -> int:
     cursor = await db.execute(
         """INSERT INTO vct_bets
-            (discord_id, match_id, team_pick, amount, odds_at_bet,
-             potential_payout, status, placed_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+            (discord_id, match_id, team1_name, team2_name, team_pick,
+             amount, odds_at_bet, potential_payout, status, placed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         """,
-        (discord_id, match_id, team_pick, amount, odds_at_bet, potential_payout, placed_at),
+        (discord_id, match_id, team1_name, team2_name, team_pick, amount, odds_at_bet, potential_payout, placed_at),
     )
     await db.commit()
     return cursor.lastrowid

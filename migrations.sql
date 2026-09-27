@@ -81,35 +81,19 @@ CREATE TABLE IF NOT EXISTS `casino_lobby_log` (
     `game` TEXT
 );
 
--- VCT Betting tables
-CREATE TABLE
-    IF NOT EXISTS `vct_matches` (
-        `match_id` INTEGER PRIMARY KEY,
-        `team1_name` TEXT NOT NULL,
-        `team2_name` TEXT NOT NULL,
-        `team1_odds` REAL,
-        `team2_odds` REAL,
-        `scheduled_time` INTEGER,
-        `status` TEXT DEFAULT 'upcoming',
-        `winner` TEXT,
-        `team1_score` INTEGER,
-        `team2_score` INTEGER,
-        `event_name` TEXT,
-        `match_url` TEXT,
-        `last_updated` INTEGER
-    );
-
+-- VCT Betting
 CREATE TABLE
     IF NOT EXISTS `vct_bets` (
         `id` INTEGER PRIMARY KEY AUTOINCREMENT,
         `discord_id` INTEGER NOT NULL,
         `match_id` INTEGER NOT NULL,
+        `team1_name` TEXT NOT NULL,
+        `team2_name` TEXT NOT NULL,
         `team_pick` TEXT NOT NULL,
         `amount` INTEGER NOT NULL,
         `odds_at_bet` REAL NOT NULL,
         `potential_payout` REAL NOT NULL,
         `status` TEXT DEFAULT 'pending',
         `placed_at` INTEGER NOT NULL,
-        `resolved_at` INTEGER,
-        FOREIGN KEY (`match_id`) REFERENCES `vct_matches`(`match_id`)
+        `resolved_at` INTEGER
     )

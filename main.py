@@ -774,17 +774,7 @@ async def vct_bet(
 @user_command()
 async def vct_bets(interaction: discord.Interaction):
     bets = await db.get_user_vct_bets(interaction.user.id)
-
-    # Build a match lookup dict
-    matches_dict = {}
-    if bets:
-        match_ids = set(b["match_id"] for b in bets)
-        for mid in match_ids:
-            m = await db.get_vct_match(mid)
-            if m:
-                matches_dict[mid] = m
-
-    pages = build_user_bets_pages(bets, matches_dict)
+    pages = build_user_bets_pages(bets)
     await interaction.response.send_message(embed=pages[0], view=MessageBook(interaction.user.id, pages))
 
 

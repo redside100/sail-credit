@@ -109,7 +109,7 @@ def create_bet_confirm_embed(
 
 
 def build_user_bets_pages(
-    bets: list, matches: Dict, per_page: int = 8
+    bets: list, per_page: int = 8
 ) -> List[discord.Embed]:
     """Build a list of embeds for a user's VCT bets, one per page."""
     if not bets:
@@ -124,14 +124,10 @@ def build_user_bets_pages(
     for chunk in divide_chunks(bets, per_page):
         lines = []
         for bet in chunk:
-            match = matches.get(bet["match_id"])
-            if not match:
-                continue
-
             team_name = (
-                match["team1_name"]
+                bet["team1_name"]
                 if bet["team_pick"] == "team1"
-                else match["team2_name"]
+                else bet["team2_name"]
             )
 
             status_emoji = {
@@ -147,7 +143,7 @@ def build_user_bets_pages(
                 payout_text = f" → **-{bet['amount']} SSC**"
 
             lines.append(
-                f"{status_emoji} **{match['team1_name']}** vs **{match['team2_name']}**\n"
+                f"{status_emoji} **{bet['team1_name']}** vs **{bet['team2_name']}**\n"
                 f"  Pick: **{team_name}** | {bet['amount']} SSC @ {bet['odds_at_bet']:.2f}{payout_text}"
             )
 
