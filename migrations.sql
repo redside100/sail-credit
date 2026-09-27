@@ -79,4 +79,21 @@ CREATE TABLE IF NOT EXISTS `casino_lobby_log` (
     `end_time` INTEGER,
     `metadata` BLOB,
     `game` TEXT
-)
+);
+
+-- VCT Betting
+CREATE TABLE
+    IF NOT EXISTS `vct_bets` (
+        `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+        `discord_id` INTEGER NOT NULL,
+        `match_id` INTEGER NOT NULL,
+        `team1_name` TEXT NOT NULL,
+        `team2_name` TEXT NOT NULL,
+        `team_pick` TEXT NOT NULL,
+        `amount` INTEGER NOT NULL,
+        `odds_at_bet` REAL NOT NULL,
+        `potential_payout` REAL NOT NULL,
+        `status` TEXT DEFAULT 'pending',
+        `placed_at` INTEGER NOT NULL,
+        `resolved_at` INTEGER
+    )
