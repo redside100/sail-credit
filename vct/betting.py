@@ -1,11 +1,11 @@
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import db
-from vct.scraper import VLRMatch, scrape_all_match_data, scrape_event_matches, scrape_match_odds
+from vct.scraper import VLRMatch, scrape_all_match_data, scrape_event_matches, scrape_match_page
 
 # How often to poll VLR.gg for matches that have active bets (in seconds)
 POLL_INTERVAL_SECONDS = 120
@@ -30,8 +30,6 @@ class VCTBet:
 class VCTBettingService:
     def __init__(self):
         self.scheduler = AsyncIOScheduler(timezone="UTC")
-        # In-memory cache only, not persisted to DB
-        self.matches: Dict[int, VLRMatch] = {}
 
     async def start(self):
         """Initialize the service and start polling for active bets."""
@@ -48,13 +46,18 @@ class VCTBettingService:
     async def fetch_matches(self) -> List[VLRMatch]:
         """On-demand scrape of all VCT matches. Called when a user runs /vct matches."""
         try:
-            scraped_matches = await scrape_all_match_data()
-            for scraped in scraped_matches:
-                self.matches[scraped.match_id] = scraped
-            return list(self.matches.values())
+            return await scrape_all_match_data()
         except Exception as e:
             print(f"VCT fetch_matches error: {e}")
-            return list(self.matches.values())
+            return []
+
+    async def get_match(self, match_id: int) -> Optional[VLRMatch]:
+        """Scrape a single match page for current data."""
+        try:
+            return await scrape_match_page(match_id)
+        except Exception as e:
+            print(f"VCT get_match error: {e}")
+            return None
 
     async def _poll_active_bets(self):
         """Only poll VLR.gg for matches that have pending bets, to check for results."""
@@ -72,15 +75,7 @@ class VCTBettingService:
                 if scraped.match_id not in match_ids:
                     continue
 
-                existing = self.matches.get(scraped.match_id)
-                self.matches[scraped.match_id] = scraped
-
-                # If a match just completed, resolve bets
-                if (
-                    scraped.status == "completed"
-                    and scraped.winner
-                    and (not existing or existing.status != "completed")
-                ):
+                if scraped.status == "completed" and scraped.winner:
                     await self._resolve_match_bets(scraped)
 
             print(f"VCT poll: checked {len(match_ids)} match(es) with active bets")
@@ -90,6 +85,9 @@ class VCTBettingService:
     async def _resolve_match_bets(self, match: VLRMatch):
         """Resolve all pending bets for a completed match."""
         pending_bets = await db.get_pending_vct_bets(match.match_id)
+        if not pending_bets:
+            return
+
         now = int(time.time())
 
         for bet_row in pending_bets:
@@ -113,27 +111,18 @@ class VCTBettingService:
             else:
                 await db.resolve_vct_bet(bet_row["id"], "lost", now)
 
-        if pending_bets:
-            winner_name = (
-                match.team1_name if match.winner == "team1" else match.team2_name
-            )
-            print(
-                f"VCT: Resolved {len(pending_bets)} bets for match {match.match_id} "
-                f"({match.team1_name} vs {match.team2_name}) — Winner: {winner_name}"
-            )
-
-    def get_all_matches(self) -> List[VLRMatch]:
-        """Get all tracked matches from cache."""
-        return list(self.matches.values())
-
-    def get_match(self, match_id: int) -> Optional[VLRMatch]:
-        """Get a specific match by ID."""
-        return self.matches.get(match_id)
+        winner_name = (
+            match.team1_name if match.winner == "team1" else match.team2_name
+        )
+        print(
+            f"VCT: Resolved {len(pending_bets)} bets for match {match.match_id} "
+            f"({match.team1_name} vs {match.team2_name}) — Winner: {winner_name}"
+        )
 
     async def place_bet(
         self,
         discord_id: int,
-        match_id: int,
+        match: VLRMatch,
         team_pick: str,
         amount: int,
     ) -> Optional[VCTBet]:
@@ -141,10 +130,6 @@ class VCTBettingService:
         Place a bet on a VCT match. Returns the bet if successful.
         The caller is responsible for checking the user has enough SSC.
         """
-        match = self.matches.get(match_id)
-        if not match:
-            return None
-
         if match.status not in ("upcoming", "live"):
             return None
 
@@ -176,7 +161,7 @@ class VCTBettingService:
 
         bet_id = await db.create_vct_bet(
             discord_id=discord_id,
-            match_id=match_id,
+            match_id=match.match_id,
             team1_name=match.team1_name,
             team2_name=match.team2_name,
             team_pick=team_pick,
@@ -189,7 +174,7 @@ class VCTBettingService:
         return VCTBet(
             id=bet_id,
             discord_id=discord_id,
-            match_id=match_id,
+            match_id=match.match_id,
             team_pick=team_pick,
             amount=amount,
             odds_at_bet=odds,
@@ -197,19 +182,3 @@ class VCTBettingService:
             status="pending",
             placed_at=now,
         )
-
-    async def refresh_odds(self, match_id: int) -> Optional[VLRMatch]:
-        """Force-refresh odds for a specific match."""
-        match = self.matches.get(match_id)
-        if not match:
-            return None
-
-        team1_odds, team2_odds = await scrape_match_odds(
-            match.match_id, match.match_url
-        )
-        if team1_odds is not None:
-            match.team1_odds = team1_odds
-        if team2_odds is not None:
-            match.team2_odds = team2_odds
-
-        return match

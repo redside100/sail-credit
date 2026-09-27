@@ -708,16 +708,18 @@ async def vct_bet(
         )
         return
 
-    match = vct_service.get_match(match_id)
+    await interaction.response.defer()
+
+    match = await vct_service.get_match(match_id)
     if not match:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=create_embed(message=f"Match `{match_id}` not found! Use `/vct matches` to see available matches."),
             ephemeral=True,
         )
         return
 
     if match.status not in ("upcoming", "live"):
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=create_embed(message="This match is no longer open for betting!"),
             ephemeral=True,
         )
@@ -729,7 +731,7 @@ async def vct_bet(
         existing_pick = existing_bets[0]["team_pick"]
         if existing_pick != team:
             other_team = match.team1_name if existing_pick == "team1" else match.team2_name
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=create_embed(
                     message=f"You already have a pending bet on **{other_team}** for this match! You can't bet on both teams."
                 ),
@@ -739,7 +741,7 @@ async def vct_bet(
 
     odds = match.team1_odds if team == "team1" else match.team2_odds
     if odds is None:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=create_embed(message="Odds are not available for this match yet. Try again later!"),
             ephemeral=True,
         )
@@ -747,7 +749,7 @@ async def vct_bet(
 
     current_ssc = interaction.data["user_data"]["sail_credit"]
     if current_ssc < amount:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=create_embed(
                 message=f"You don't have enough SSC! You have **{current_ssc} SSC** but tried to bet **{amount} SSC**."
             ),
@@ -757,22 +759,21 @@ async def vct_bet(
 
     bet = await vct_service.place_bet(
         discord_id=interaction.user.id,
-        match_id=match_id,
+        match=match,
         team_pick=team,
         amount=amount,
     )
 
     if not bet:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=create_embed(message="Something went wrong placing your bet. Please try again!"),
             ephemeral=True,
         )
         return
 
     new_balance = current_ssc - amount
-    team_name = match.team1_name if team == "team1" else match.team2_name
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         embed=create_bet_confirm_embed(
             match=match,
             team_pick=team,

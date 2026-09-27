@@ -198,6 +198,70 @@ async def scrape_match_odds(match_id: int, match_url: str = "") -> Tuple[Optiona
     return team1_odds, team2_odds
 
 
+async def scrape_match_page(match_id: int) -> Optional[VLRMatch]:
+    """Scrape a single match page for team names, odds, and status."""
+    url = f"{VLR_BASE_URL}/{match_id}"
+    html = await _fetch_page(url)
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    header = soup.select_one(".match-header-vs")
+    if not header:
+        return None
+
+    team1_el = header.select_one(".match-header-link.mod-1 .wf-title-med")
+    team2_el = header.select_one(".match-header-link.mod-2 .wf-title-med")
+    if not team1_el or not team2_el:
+        return None
+
+    team1_name = team1_el.get_text(strip=True)
+    team2_name = team2_el.get_text(strip=True)
+
+    # Status
+    status = "upcoming"
+    notes = header.select(".match-header-vs-note")
+    for note in notes:
+        note_text = note.get_text(strip=True).lower()
+        if "final" in note_text:
+            status = "completed"
+        elif "live" in note_text:
+            status = "live"
+
+    # Odds (average across sportsbooks)
+    team1_odds = None
+    team2_odds = None
+    bet_items = soup.select("a.match-bet-item")
+    if bet_items:
+        all_t1, all_t2 = [], []
+        for bet_item in bet_items:
+            o1 = bet_item.select_one(".match-bet-item-odds.mod-1")
+            o2 = bet_item.select_one(".match-bet-item-odds.mod-2")
+            if o1:
+                try:
+                    all_t1.append(float(o1.get_text(strip=True)))
+                except ValueError:
+                    pass
+            if o2:
+                try:
+                    all_t2.append(float(o2.get_text(strip=True)))
+                except ValueError:
+                    pass
+        team1_odds = round(sum(all_t1) / len(all_t1), 2) if all_t1 else None
+        team2_odds = round(sum(all_t2) / len(all_t2), 2) if all_t2 else None
+
+    return VLRMatch(
+        match_id=match_id,
+        team1_name=team1_name,
+        team2_name=team2_name,
+        team1_odds=team1_odds,
+        team2_odds=team2_odds,
+        status=status,
+        match_url=url,
+    )
+
+
 async def scrape_all_match_data() -> List[VLRMatch]:
     """
     Scrape all VCT Champions matches from the event page,
