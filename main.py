@@ -13,11 +13,9 @@ from models import SerializableMessage
 from party import Party, PartyService, STARTING_SSC
 from vct.betting import VCTBettingService, MIN_BET
 from vct.views import (
-    MatchListView,
-    BetUserBetsView,
-    create_matches_embed,
+    build_matches_pages,
+    build_user_bets_pages,
     create_bet_confirm_embed,
-    create_user_bets_embed,
 )
 import validators
 from datetime import datetime, timedelta
@@ -686,9 +684,9 @@ async def vct_matches(interaction: discord.Interaction):
         )
         return
 
-    embed = create_matches_embed(matches)
-    view = MatchListView(interaction.user.id, matches) if len(matches) > 5 else None
-    await interaction.followup.send(embed=embed, view=view)
+    pages = build_matches_pages(matches)
+    view = MessageBook(interaction.user.id, pages) if len(pages) > 1 else None
+    await interaction.followup.send(embed=pages[0], view=view)
 
 
 @vct_group.command(name="bet", description="Bet SSC on a VCT match.")
@@ -795,9 +793,9 @@ async def vct_bets(interaction: discord.Interaction):
         if m:
             matches_dict[mid] = m
 
-    embed = create_user_bets_embed(bets, matches_dict)
-    view = BetUserBetsView(interaction.user.id, bets, matches_dict) if len(bets) > 8 else None
-    await interaction.response.send_message(embed=embed, view=view)
+    pages = build_user_bets_pages(bets, matches_dict)
+    view = MessageBook(interaction.user.id, pages) if len(pages) > 1 else None
+    await interaction.response.send_message(embed=pages[0], view=view)
 
 
 @vct_group.command(name="leaderboard", description="VCT betting leaderboard — who's profited the most?")
