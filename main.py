@@ -674,11 +674,13 @@ async def vct_matches(interaction: discord.Interaction):
         )
         return
 
-    matches = vct_service.get_all_matches()
+    await interaction.response.defer()
+
+    matches = await vct_service.fetch_matches()
     if not matches:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=create_embed(
-                message="No VCT matches found. The bot may still be loading data from VLR.gg — try again in a minute!"
+                message="No VCT matches found. VLR.gg may be unreachable — try again in a minute!"
             ),
             ephemeral=True,
         )
@@ -686,7 +688,7 @@ async def vct_matches(interaction: discord.Interaction):
 
     embed = create_matches_embed(matches)
     view = MatchListView(interaction.user.id, matches) if len(matches) > 5 else None
-    await interaction.response.send_message(embed=embed, view=view)
+    await interaction.followup.send(embed=embed, view=view)
 
 
 @vct_group.command(name="bet", description="Bet SSC on a VCT match.")

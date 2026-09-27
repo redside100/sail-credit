@@ -5,9 +5,9 @@ from typing import Dict, List, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import db
-from vct.scraper import VLRMatch, scrape_all_match_data, scrape_match_odds
+from vct.scraper import VLRMatch, scrape_all_match_data, scrape_event_matches, scrape_match_odds
 
-# How often to poll VLR.gg for match updates (in seconds)
+# How often to poll VLR.gg for matches that have active bets (in seconds)
 POLL_INTERVAL_SECONDS = 120
 # Minimum bet amount
 MIN_BET = 10
@@ -22,7 +22,7 @@ class VCTBet:
     amount: int
     odds_at_bet: float
     potential_payout: float
-    status: str  # "pending", "won", "lost", "refunded"
+    status: str  # "pending", "won", "lost"
     placed_at: int
     resolved_at: Optional[int] = None
 
@@ -30,24 +30,21 @@ class VCTBet:
 class VCTBettingService:
     def __init__(self):
         self.scheduler = AsyncIOScheduler(timezone="UTC")
+        # Local cache of matches (populated on-demand and from DB)
         self.matches: Dict[int, VLRMatch] = {}
-        self.last_poll: int = 0
 
     async def start(self):
-        """Initialize the service: load matches from DB and start polling."""
+        """Initialize the service: load matches from DB and start polling for active bets."""
         await self._load_matches_from_db()
         self.scheduler.add_job(
-            self._poll_matches,
+            self._poll_active_bets,
             "interval",
             seconds=POLL_INTERVAL_SECONDS,
-            id="vct_poll",
+            id="vct_poll_active",
             replace_existing=True,
         )
         self.scheduler.start()
         print("VCT Betting Service started!")
-
-        # Do an initial poll
-        await self._poll_matches()
 
     async def _load_matches_from_db(self):
         """Load cached match data from the database."""
@@ -68,35 +65,59 @@ class VCTBettingService:
                 match_url=m["match_url"] or "",
             )
 
-    async def _poll_matches(self):
-        """Poll VLR.gg for match updates and resolve completed bets."""
+    async def fetch_matches(self) -> List[VLRMatch]:
+        """On-demand scrape of all VCT matches. Called when a user runs /vct matches."""
         try:
             scraped_matches = await scrape_all_match_data()
             now = int(time.time())
-            self.last_poll = now
 
             for scraped in scraped_matches:
+                await self._upsert_match(scraped, now)
+
+            return list(self.matches.values())
+        except Exception as e:
+            print(f"VCT fetch_matches error: {e}")
+            # Fall back to cached data
+            return list(self.matches.values())
+
+    async def _upsert_match(self, scraped: VLRMatch, now: int):
+        """Update a match in DB and local cache."""
+        await db.upsert_vct_match(
+            match_id=scraped.match_id,
+            team1_name=scraped.team1_name,
+            team2_name=scraped.team2_name,
+            team1_odds=scraped.team1_odds,
+            team2_odds=scraped.team2_odds,
+            scheduled_time=scraped.scheduled_time,
+            status=scraped.status,
+            winner=scraped.winner,
+            team1_score=scraped.team1_score,
+            team2_score=scraped.team2_score,
+            event_name=scraped.event_name,
+            match_url=scraped.match_url,
+            last_updated=now,
+        )
+        self.matches[scraped.match_id] = scraped
+
+    async def _poll_active_bets(self):
+        """Only poll VLR.gg for matches that have pending bets, to check for results."""
+        try:
+            matches_with_bets = await db.get_matches_with_pending_bets()
+            if not matches_with_bets:
+                return
+
+            match_ids = {row["match_id"] for row in matches_with_bets}
+
+            # Scrape the event page to get current status/results
+            scraped_matches = await scrape_event_matches()
+            now = int(time.time())
+
+            for scraped in scraped_matches:
+                if scraped.match_id not in match_ids:
+                    continue
+
                 existing = self.matches.get(scraped.match_id)
-
-                # Upsert into DB
-                await db.upsert_vct_match(
-                    match_id=scraped.match_id,
-                    team1_name=scraped.team1_name,
-                    team2_name=scraped.team2_name,
-                    team1_odds=scraped.team1_odds,
-                    team2_odds=scraped.team2_odds,
-                    scheduled_time=scraped.scheduled_time,
-                    status=scraped.status,
-                    winner=scraped.winner,
-                    team1_score=scraped.team1_score,
-                    team2_score=scraped.team2_score,
-                    event_name=scraped.event_name,
-                    match_url=scraped.match_url,
-                    last_updated=now,
-                )
-
-                # Update local cache
-                self.matches[scraped.match_id] = scraped
+                await self._upsert_match(scraped, now)
 
                 # If a match just completed, resolve bets
                 if (
@@ -106,7 +127,8 @@ class VCTBettingService:
                 ):
                     await self._resolve_match_bets(scraped)
 
-            print(f"VCT poll complete: {len(scraped_matches)} matches updated")
+            resolved_count = len(match_ids)
+            print(f"VCT poll: checked {resolved_count} match(es) with active bets")
         except Exception as e:
             print(f"VCT poll error: {e}")
 
@@ -119,7 +141,6 @@ class VCTBettingService:
             discord_id = bet_row["discord_id"]
             team_pick = bet_row["team_pick"]
             amount = bet_row["amount"]
-            odds = bet_row["odds_at_bet"]
             potential_payout = bet_row["potential_payout"]
 
             user = await db.get_user(discord_id)
@@ -160,7 +181,7 @@ class VCTBettingService:
         ]
 
     def get_all_matches(self) -> List[VLRMatch]:
-        """Get all tracked matches."""
+        """Get all tracked matches from cache."""
         return list(self.matches.values())
 
     def get_match(self, match_id: int) -> Optional[VLRMatch]:

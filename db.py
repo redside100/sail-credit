@@ -508,6 +508,13 @@ async def get_pending_vct_bets(match_id: int) -> List[Dict[str, Any]]:
         return await cursor.fetchall()
 
 
+async def get_matches_with_pending_bets() -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT DISTINCT match_id FROM vct_bets WHERE status = 'pending'"
+    ) as cursor:
+        return await cursor.fetchall()
+
+
 async def resolve_vct_bet(bet_id: int, status: str, resolved_at: int) -> None:
     await db.execute(
         "UPDATE vct_bets SET status = ?, resolved_at = ? WHERE id = ?",
