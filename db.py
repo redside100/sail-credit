@@ -30,10 +30,26 @@ async def cleanup():
 
 
 async def run_migrations():
+    # Add the season column before the repeatable SQL migration rebuilds this
+    # table. Existing rows remain unassigned until a season is started.
+    async with db.execute("PRAGMA table_info(sail_credit_log)") as cursor:
+        columns = {row["name"] for row in await cursor.fetchall()}
+    if "season_id" not in columns:
+        print("Migration: adding season_id to sail_credit_log...")
+        await db.execute("ALTER TABLE sail_credit_log ADD COLUMN season_id INTEGER")
+        await db.commit()
+
     with open("migrations.sql", "r") as f:
         script = f.read()
     await db.executescript(script)
     await db.commit()
+
+    async with db.execute("PRAGMA table_info(sail_credit_log)") as cursor:
+        columns = {row["name"] for row in await cursor.fetchall()}
+    if "season_id" not in columns:
+        raise RuntimeError(
+            "Database migration failed: sail_credit_log has no season_id column"
+        )
 
 
 async def create_user(discord_id: int) -> Dict[str, Any]:
@@ -41,6 +57,15 @@ async def create_user(discord_id: int) -> Dict[str, Any]:
         f"INSERT INTO users (discord_id, sail_credit) VALUES (?, {party.STARTING_SSC})",
         (discord_id,),
     )
+    async with db.execute(
+        "SELECT season_id FROM seasons WHERE status = 'ACTIVE' ORDER BY season_id DESC LIMIT 1"
+    ) as cursor:
+        active_season = await cursor.fetchone()
+    if active_season:
+        await db.execute(
+            "INSERT INTO user_season_stats (discord_id, season_id, highest_sail_credit) VALUES (?, ?, ?)",
+            (discord_id, active_season["season_id"], party.STARTING_SSC),
+        )
     await db.commit()
     return {"discord_id": discord_id, "sail_credit": party.STARTING_SSC}
 
@@ -95,10 +120,17 @@ async def change_and_log_sail_credit(
 ) -> None:
     if not timestamp:
         timestamp = int(time.time())
+    async with db.execute(
+        "SELECT season_id FROM seasons WHERE status = 'ACTIVE' ORDER BY season_id DESC LIMIT 1"
+    ) as cursor:
+        active_season = await cursor.fetchone()
+    season_id = active_season["season_id"] if active_season else None
+
     await db.execute(
-        "INSERT INTO sail_credit_log VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sail_credit_log (discord_id, season_id, party_size, party_created_at, party_finished_at, prev_sail_credit, new_sail_credit, source, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             discord_id,
+            season_id,
             party_size,
             party_created_at,
             party_finished_at,
@@ -111,7 +143,89 @@ async def change_and_log_sail_credit(
     await db.execute(
         "UPDATE users SET sail_credit = ? WHERE discord_id = ?", (new_ssc, discord_id)
     )
+    if season_id is not None:
+        await db.execute(
+            "INSERT INTO user_season_stats (discord_id, season_id, highest_sail_credit) VALUES (?, ?, ?) "
+            "ON CONFLICT(discord_id, season_id) DO UPDATE SET highest_sail_credit = MAX(highest_sail_credit, excluded.highest_sail_credit)",
+            (discord_id, season_id, new_ssc),
+        )
     await db.commit()
+
+
+async def create_new_season(start_timestamp: int) -> int:
+    """Close the active season, snapshot its ranks, and reset users atomically."""
+    await db.execute("BEGIN IMMEDIATE")
+    try:
+        async with db.execute(
+            "SELECT season_id FROM seasons WHERE status = 'ACTIVE' ORDER BY season_id DESC LIMIT 1"
+        ) as cursor:
+            active_season = await cursor.fetchone()
+
+        async with db.execute(
+            "SELECT 1 FROM seasons WHERE season_id = 0 LIMIT 1"
+        ) as cursor:
+            season_zero = await cursor.fetchone()
+
+        if not season_zero:
+            # Preserve any balances and logs from before explicit seasons began.
+            await db.execute(
+                "INSERT OR IGNORE INTO seasons (season_id, start_timestamp, end_timestamp, status) "
+                "VALUES (0, COALESCE((SELECT MIN(timestamp) FROM sail_credit_log WHERE season_id IS NULL), ?), ?, 'COMPLETED')",
+                (start_timestamp, start_timestamp),
+            )
+            await db.execute(
+                "INSERT OR IGNORE INTO user_season_stats (discord_id, season_id, highest_sail_credit) "
+                "SELECT u.discord_id, 0, MAX(u.sail_credit, "
+                "COALESCE((SELECT MAX(prev_sail_credit) FROM sail_credit_log WHERE discord_id = u.discord_id AND season_id IS NULL), u.sail_credit), "
+                "COALESCE((SELECT MAX(new_sail_credit) FROM sail_credit_log WHERE discord_id = u.discord_id AND season_id IS NULL), u.sail_credit)) "
+                "FROM users AS u"
+            )
+            await db.execute(
+                "UPDATE sail_credit_log SET season_id = 0 WHERE season_id IS NULL"
+            )
+            await db.execute(
+                "UPDATE user_season_stats SET highest_rank = ("
+                "SELECT 1 + COUNT(*) FROM user_season_stats AS other "
+                "WHERE other.season_id = user_season_stats.season_id "
+                "AND other.highest_sail_credit > user_season_stats.highest_sail_credit"
+                ") WHERE season_id = 0"
+            )
+
+        if active_season:
+            old_season_id = active_season["season_id"]
+            await db.execute(
+                "UPDATE user_season_stats SET highest_rank = ("
+                "SELECT 1 + COUNT(*) FROM user_season_stats AS other "
+                "WHERE other.season_id = user_season_stats.season_id "
+                "AND other.highest_sail_credit > user_season_stats.highest_sail_credit"
+                ") WHERE season_id = ?",
+                (old_season_id,),
+            )
+            await db.execute(
+                "UPDATE seasons SET status = 'COMPLETED', end_timestamp = ? WHERE season_id = ?",
+                (start_timestamp, old_season_id),
+            )
+        async with db.execute(
+            "SELECT COALESCE(MAX(season_id), 0) + 1 AS next_id FROM seasons"
+        ) as cursor:
+            row = await cursor.fetchone()
+            new_season_id = row["next_id"]
+
+        await db.execute(
+            "INSERT INTO seasons (season_id, start_timestamp, status) VALUES (?, ?, 'ACTIVE')",
+            (new_season_id, start_timestamp),
+        )
+        await db.execute("UPDATE users SET sail_credit = ?", (party.STARTING_SSC,))
+        await db.execute(
+            "INSERT INTO user_season_stats (discord_id, season_id, highest_sail_credit) "
+            "SELECT discord_id, ?, ? FROM users",
+            (new_season_id, party.STARTING_SSC),
+        )
+        await db.commit()
+        return new_season_id
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def log_convict_reason(discord_id: int, reason: str) -> None:
@@ -147,6 +261,39 @@ async def get_ssc_leaderboard() -> List[Dict[str, Any]]:
     ) as cursor:
         rows = await cursor.fetchall()
         return rows
+
+
+async def get_user_season_history(discord_id: int) -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT s.season_id, s.start_timestamp, s.end_timestamp, s.status, "
+        "stats.highest_sail_credit, "
+        "CASE WHEN s.status = 'ACTIVE' THEN ("
+        "  SELECT 1 + COUNT(*) FROM user_season_stats AS other "
+        "  WHERE other.season_id = stats.season_id "
+        "    AND other.highest_sail_credit > stats.highest_sail_credit"
+        ") ELSE stats.highest_rank END AS highest_rank "
+        "FROM user_season_stats AS stats "
+        "JOIN seasons AS s ON s.season_id = stats.season_id "
+        "WHERE stats.discord_id = ? ORDER BY s.season_id DESC",
+        (discord_id,),
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def get_season_leaderboard(season_id: int) -> List[Dict[str, Any]]:
+    async with db.execute(
+        "SELECT stats.discord_id, stats.highest_sail_credit, "
+        "s.end_timestamp, s.status, "
+        "1 + (SELECT COUNT(*) FROM user_season_stats AS other "
+        "WHERE other.season_id = stats.season_id "
+        "AND other.highest_sail_credit > stats.highest_sail_credit) AS season_rank "
+        "FROM user_season_stats AS stats "
+        "JOIN seasons AS s ON s.season_id = stats.season_id "
+        "WHERE stats.season_id = ? "
+        "ORDER BY stats.highest_sail_credit DESC, stats.discord_id ASC",
+        (season_id,),
+    ) as cursor:
+        return await cursor.fetchall()
 
 
 async def get_conviction_log(discord_id: Optional[int] = None) -> List[Dict[str, Any]]:

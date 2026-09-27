@@ -4,7 +4,7 @@ from typing import List
 import discord
 
 import db
-from party import Party, PartyMemberStatus, PartyService, PartyStatus
+from party import Party, PartyMemberStatus, PartyService, PartyStatus, STARTING_SSC
 from scb import SailCreditBureau
 from util import (
     create_embed,
@@ -14,6 +14,49 @@ from util import (
 )
 
 scb = SailCreditBureau()
+
+
+class SeasonResetConfirmationView(discord.ui.View):
+    def __init__(self, admin_id: int):
+        super().__init__(timeout=120)
+        self.admin_id = admin_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.admin_id:
+            await interaction.response.send_message(
+                "Only the administrator who started this reset can confirm it.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Confirm reset", style=discord.ButtonStyle.danger)
+    async def confirm(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        season_id = await db.create_new_season(int(time.time()))
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content=f"Season {season_id} has started. Everyone's SSC was reset to {STARTING_SSC}.",
+            view=self,
+        )
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content="Season reset cancelled.", view=self
+        )
+        self.stop()
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+
+
 """
 View Workflow for Parties
 
@@ -560,16 +603,14 @@ class MessageBook(discord.ui.View):
 
     @discord.ui.button(label="Prev", style=discord.ButtonStyle.blurple)
     async def prev_button(self, interaction: discord.Interaction, _):
-        if not interaction.user.id == self.user_id:
+        if interaction.user.id != self.user_id:
             return
-
         await self.prev_page(interaction)
 
     @discord.ui.button(label="Next", style=discord.ButtonStyle.blurple)
     async def next_button(self, interaction: discord.Interaction, _):
-        if not interaction.user.id == self.user_id:
+        if interaction.user.id != self.user_id:
             return
-
         await self.next_page(interaction)
 
     async def next_page(self, interaction: discord.Interaction):

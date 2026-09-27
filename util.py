@@ -101,6 +101,26 @@ def divide_chunks(l, n):
         yield l[i : i + n]
 
 
+def get_season_emoji(highest_ssc: int) -> str:
+    if highest_ssc >= 1_000_000:
+        return "🚀"
+    if highest_ssc >= 500_000:
+        return "⭐"
+    if highest_ssc >= 100_000:
+        return "👑"
+    if highest_ssc >= 50_000:
+        return "💎"
+    if highest_ssc >= 25_000:
+        return "💰"
+    if highest_ssc >= 10_000:
+        return "🔥"
+    if highest_ssc >= 5_000:
+        return "📈"
+    if highest_ssc >= 2_000:
+        return "📊"
+    return "📉"
+
+
 def down_scale_data(qc_data, n=500):
     if n > len(qc_data):
         return qc_data
