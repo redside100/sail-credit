@@ -146,6 +146,16 @@ async def scrape_event_matches() -> List[VLRMatch]:
     return matches
 
 
+def _find_ggbet_item(bet_items):
+    """Find the GGBet sportsbook entry from the list of bet items on a VLR.gg match page."""
+    for item in bet_items:
+        img = item.select_one("img[src*='ggbet']")
+        if img:
+            return item
+    # Fallback: GGBet is typically the first sportsbook listed
+    return bet_items[0] if bet_items else None
+
+
 async def scrape_match_odds(match_id: int, match_url: str = "") -> Tuple[Optional[float], Optional[float]]:
     """Scrape betting odds from an individual match page. Returns (team1_odds, team2_odds)."""
     if not match_url:
@@ -173,27 +183,26 @@ async def scrape_match_odds(match_id: int, match_url: str = "") -> Tuple[Optiona
                 pass
         return None, None
 
-    # Average odds across all sportsbooks
-    all_team1_odds = []
-    all_team2_odds = []
+    # Use GGBet odds (first sportsbook listed on VLR.gg)
+    ggbet_item = _find_ggbet_item(bet_items)
+    if not ggbet_item:
+        return None, None
 
-    for bet_item in bet_items:
-        odds_1_el = bet_item.select_one(".match-bet-item-odds.mod-1")
-        odds_2_el = bet_item.select_one(".match-bet-item-odds.mod-2")
+    team1_odds = None
+    team2_odds = None
+    odds_1_el = ggbet_item.select_one(".match-bet-item-odds.mod-1")
+    odds_2_el = ggbet_item.select_one(".match-bet-item-odds.mod-2")
 
-        if odds_1_el:
-            try:
-                all_team1_odds.append(float(odds_1_el.get_text(strip=True)))
-            except ValueError:
-                pass
-        if odds_2_el:
-            try:
-                all_team2_odds.append(float(odds_2_el.get_text(strip=True)))
-            except ValueError:
-                pass
-
-    team1_odds = round(sum(all_team1_odds) / len(all_team1_odds), 2) if all_team1_odds else None
-    team2_odds = round(sum(all_team2_odds) / len(all_team2_odds), 2) if all_team2_odds else None
+    if odds_1_el:
+        try:
+            team1_odds = float(odds_1_el.get_text(strip=True))
+        except ValueError:
+            pass
+    if odds_2_el:
+        try:
+            team2_odds = float(odds_2_el.get_text(strip=True))
+        except ValueError:
+            pass
 
     return team1_odds, team2_odds
 
@@ -229,27 +238,25 @@ async def scrape_match_page(match_id: int) -> Optional[VLRMatch]:
         elif "live" in note_text:
             status = "live"
 
-    # Odds (average across sportsbooks)
+    # Odds (GGBet only)
     team1_odds = None
     team2_odds = None
     bet_items = soup.select("a.match-bet-item")
     if bet_items:
-        all_t1, all_t2 = [], []
-        for bet_item in bet_items:
-            o1 = bet_item.select_one(".match-bet-item-odds.mod-1")
-            o2 = bet_item.select_one(".match-bet-item-odds.mod-2")
+        ggbet_item = _find_ggbet_item(bet_items)
+        if ggbet_item:
+            o1 = ggbet_item.select_one(".match-bet-item-odds.mod-1")
+            o2 = ggbet_item.select_one(".match-bet-item-odds.mod-2")
             if o1:
                 try:
-                    all_t1.append(float(o1.get_text(strip=True)))
+                    team1_odds = float(o1.get_text(strip=True))
                 except ValueError:
                     pass
             if o2:
                 try:
-                    all_t2.append(float(o2.get_text(strip=True)))
+                    team2_odds = float(o2.get_text(strip=True))
                 except ValueError:
                     pass
-        team1_odds = round(sum(all_t1) / len(all_t1), 2) if all_t1 else None
-        team2_odds = round(sum(all_t2) / len(all_t2), 2) if all_t2 else None
 
     return VLRMatch(
         match_id=match_id,
