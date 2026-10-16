@@ -729,3 +729,285 @@ class TopupView(discord.ui.View):
             return
         if not interaction.response.is_done():
             await interaction.response.defer()
+
+
+def _format_odds(odds) -> str:
+    return f"{odds:.2f}" if odds is not None else "N/A"
+
+
+class MatchBetView(discord.ui.View):
+    """
+    Interactive bet slip for esports matches (VCT, LoL).
+    Pick a match from the dropdown, pick a team with a button, then enter the amount in a modal.
+
+    The service must provide get_matches(), get_match(), place_bet() and get_user_pending_bets_for_match().
+    """
+
+    def __init__(
+        self,
+        interaction: discord.Interaction,
+        service,
+        game_name: str,
+        min_bet: int,
+        matches: list,
+        create_confirm_embed,
+    ):
+        super().__init__(timeout=180)
+        self.interaction = interaction
+        self.user_id = interaction.user.id
+        self.service = service
+        self.game_name = game_name
+        self.min_bet = min_bet
+        self.matches = {m.match_id: m for m in matches}
+        self.balance = get_balance(interaction)
+        self.create_confirm_embed = create_confirm_embed
+        self.selected_match = None
+        self._build_items()
+
+    @classmethod
+    async def send(
+        cls,
+        interaction: discord.Interaction,
+        service,
+        game_name: str,
+        min_bet: int,
+        create_confirm_embed,
+    ):
+        """Open the bet slip for every match that's currently open for betting."""
+        matches = sorted(
+            (
+                m
+                for m in service.get_matches()
+                if m.status in ("upcoming", "live")
+                and (m.team1_odds is not None or m.team2_odds is not None)
+            ),
+            key=lambda m: m.scheduled_time or 0,
+        )[:25]
+
+        if not matches:
+            await interaction.response.send_message(
+                embed=create_embed(
+                    message=f"No {game_name} matches are open for betting right now. Check back later!"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        view = cls(interaction, service, game_name, min_bet, matches, create_confirm_embed)
+        await interaction.response.send_message(
+            embed=view.build_embed(), view=view, ephemeral=True
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        return interaction.user.id == self.user_id
+
+    async def on_timeout(self):
+        try:
+            await self.interaction.edit_original_response(view=None)
+        except discord.HTTPException:
+            pass
+
+    def _build_items(self):
+        self.clear_items()
+
+        self.select = discord.ui.Select(placeholder="Select a match...")
+        self.select.callback = self.select_match
+        for match in self.matches.values():
+            description = f"{_format_odds(match.team1_odds)} / {_format_odds(match.team2_odds)}"
+            if match.status == "live":
+                description = f"🔴 LIVE · {description}"
+            if match.series_name:
+                description += f" · {match.series_name}"
+            self.select.options.append(
+                discord.SelectOption(
+                    label=f"{match.team1_name} vs {match.team2_name}"[:100],
+                    value=str(match.match_id),
+                    description=description[:100],
+                    default=self.selected_match is not None
+                    and match.match_id == self.selected_match.match_id,
+                )
+            )
+        self.add_item(self.select)
+
+        if self.selected_match:
+            match = self.selected_match
+            for team_pick, name, odds in (
+                ("team1", match.team1_name, match.team1_odds),
+                ("team2", match.team2_name, match.team2_odds),
+            ):
+                button = discord.ui.Button(
+                    label=f"{name} ({_format_odds(odds)})"[:80],
+                    style=discord.ButtonStyle.blurple,
+                    disabled=odds is None,
+                    row=1,
+                )
+                button.callback = self._team_callback(team_pick)
+                self.add_item(button)
+
+    def _team_callback(self, team_pick: str):
+        async def callback(interaction: discord.Interaction):
+            await interaction.response.send_modal(
+                BetAmountModal(self, self.selected_match, team_pick)
+            )
+
+        return callback
+
+    def build_embed(self) -> discord.Embed:
+        title = f"🎰 {self.game_name} Bet Slip"
+        if not self.selected_match:
+            return create_embed(
+                title=title,
+                message=(
+                    "Pick a match from the dropdown below.\n\n"
+                    f"Your balance: **{self.balance} SSC**"
+                ),
+            )
+
+        match = self.selected_match
+        lines = [
+            f"**{match.team1_name}** — pays **{_format_odds(match.team1_odds)}x**",
+            f"**{match.team2_name}** — pays **{_format_odds(match.team2_odds)}x**",
+        ]
+        details = []
+        if match.series_name:
+            details.append(match.series_name)
+        if match.status == "live":
+            live = "🔴 Live"
+            if match.team1_score is not None and match.team2_score is not None:
+                live += f" {match.team1_score}-{match.team2_score}"
+            details.append(live)
+        elif match.scheduled_time:
+            details.append(f"Starts <t:{match.scheduled_time}:R>")
+        if details:
+            lines.append(f"↳ {' · '.join(details)}")
+
+        lines.append(f"\nYour balance: **{self.balance} SSC**")
+        lines.append("Pick a team below. Odds lock in when you place your bet.")
+
+        return create_embed(
+            title=f"{title} — {match.team1_name} vs {match.team2_name}",
+            message="\n".join(lines),
+        )
+
+    async def select_match(self, interaction: discord.Interaction):
+        self.selected_match = self.matches.get(int(self.select.values[0]))
+        self._build_items()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def place_bet(
+        self,
+        interaction: discord.Interaction,
+        match_id: int,
+        team_pick: str,
+        amount: int,
+    ):
+        """Validate and place the bet. The interaction must already be deferred."""
+
+        async def fail(message: str):
+            await interaction.followup.send(
+                embed=create_embed(message=message), ephemeral=True
+            )
+
+        # Re-fetch the match so the bet locks in current odds, not the ones from the last poll
+        match = await self.service.get_match(match_id)
+        if not match:
+            await fail("Couldn't load this match right now. Try again in a moment!")
+            return
+
+        if match.status not in ("upcoming", "live"):
+            await fail("This match is no longer open for betting!")
+            return
+
+        # Prevent betting on both teams for the same match
+        existing_bets = await self.service.get_user_pending_bets_for_match(
+            self.user_id, match_id
+        )
+        if existing_bets and existing_bets[0]["team_pick"] != team_pick:
+            other_team = (
+                match.team1_name
+                if existing_bets[0]["team_pick"] == "team1"
+                else match.team2_name
+            )
+            await fail(
+                f"You already have a pending bet on **{other_team}** for this match! You can't bet on both teams."
+            )
+            return
+
+        odds = match.team1_odds if team_pick == "team1" else match.team2_odds
+        if odds is None:
+            await fail("Odds are not available for this match yet. Try again later!")
+            return
+
+        user = await db.get_user(self.user_id)
+        current_ssc = user["sail_credit"]  # pyright: ignore
+        if current_ssc < amount:
+            await fail(
+                f"You don't have enough SSC! You have **{current_ssc} SSC** but tried to bet **{amount} SSC**."
+            )
+            return
+
+        bet = await self.service.place_bet(
+            discord_id=self.user_id,
+            match=match,
+            team_pick=team_pick,
+            amount=amount,
+        )
+        if not bet:
+            await fail("Something went wrong placing your bet. Please try again!")
+            return
+
+        self.balance = current_ssc - amount
+        self.stop()
+        await interaction.edit_original_response(
+            embed=create_embed(
+                title=f"🎰 {self.game_name} Bet Slip",
+                message="✅ Bet placed! Your bet slip has been posted in the channel.",
+            ),
+            view=None,
+        )
+        await interaction.followup.send(
+            content=f"{interaction.user.mention} placed a {self.game_name} bet!",
+            embed=self.create_confirm_embed(
+                match=match,
+                team_pick=team_pick,
+                amount=amount,
+                odds=bet.odds_at_bet,
+                potential_payout=bet.potential_payout,
+                new_balance=self.balance,
+            ),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+
+class BetAmountModal(discord.ui.Modal):
+    amount = discord.ui.TextInput(
+        label="Amount (SSC)",
+        required=True,
+        max_length=12,
+    )
+
+    def __init__(self, bet_view: MatchBetView, match, team_pick: str):
+        team_name = match.team1_name if team_pick == "team1" else match.team2_name
+        super().__init__(title=f"Bet on {team_name}"[:45])
+        self.bet_view = bet_view
+        self.match_id = match.match_id
+        self.team_pick = team_pick
+        self.amount.placeholder = (
+            f"Min {bet_view.min_bet} — you have {bet_view.balance} SSC"
+        )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw_amount = self.amount.value.strip().replace(",", "")
+        if not raw_amount.isdigit() or int(raw_amount) < self.bet_view.min_bet:
+            await interaction.response.send_message(
+                embed=create_embed(
+                    message=f"Enter a whole number of at least **{self.bet_view.min_bet} SSC**."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        await self.bet_view.place_bet(
+            interaction, self.match_id, self.team_pick, int(raw_amount)
+        )

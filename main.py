@@ -17,6 +17,8 @@ from vct.views import (
     build_user_bets_pages,
     create_bet_confirm_embed,
 )
+from lol.betting import LoLBettingService, MIN_BET as LOL_MIN_BET
+from lol import views as lol_views
 import validators
 from datetime import datetime, timedelta
 
@@ -33,6 +35,7 @@ from util import (
 )
 from views import (
     LeaderboardView,
+    MatchBetView,
     MessageBook,
     PartyView,
     SeasonResetConfirmationView,
@@ -672,35 +675,23 @@ async def vct_matches(interaction: discord.Interaction):
         )
         return
 
-    await interaction.response.defer()
-
-    matches = await vct_service.fetch_matches()
+    matches = vct_service.get_matches()
     if not matches:
-        await interaction.followup.send(
+        await interaction.response.send_message(
             embed=create_embed(
-                message="No VCT matches found. VLR.gg may be unreachable — try again in a minute!"
+                message="No VCT matches loaded yet. VLR.gg may be unreachable — try again in a minute!"
             ),
             ephemeral=True,
         )
         return
 
     pages = build_matches_pages(matches)
-    await interaction.followup.send(embed=pages[0], view=MessageBook(interaction.user.id, pages))
+    await interaction.response.send_message(embed=pages[0], view=MessageBook(interaction.user.id, pages))
 
 
 @vct_group.command(name="bet", description="Bet SSC on a VCT match.")
-@app_commands.describe(
-    match_id="The match ID (shown in /vct matches).",
-    team="Which team to bet on (team1 = left, team2 = right in /vct matches).",
-    amount="Amount of SSC to bet (minimum 10, no upper limit).",
-)
 @user_command()
-async def vct_bet(
-    interaction: discord.Interaction,
-    match_id: int,
-    team: Literal["team1", "team2"],
-    amount: app_commands.Range[int, 10],
-):
+async def vct_bet(interaction: discord.Interaction):
     if not vct_service:
         await interaction.response.send_message(
             embed=create_embed(message="VCT service is not ready yet. Try again in a moment!"),
@@ -708,80 +699,8 @@ async def vct_bet(
         )
         return
 
-    await interaction.response.defer()
-
-    match = await vct_service.get_match(match_id)
-    if not match:
-        await interaction.followup.send(
-            embed=create_embed(message=f"Match `{match_id}` not found! Use `/vct matches` to see available matches."),
-            ephemeral=True,
-        )
-        return
-
-    if match.status not in ("upcoming", "live"):
-        await interaction.followup.send(
-            embed=create_embed(message="This match is no longer open for betting!"),
-            ephemeral=True,
-        )
-        return
-
-    # Prevent betting on both teams for the same match
-    existing_bets = await db.get_user_pending_bets_for_match(interaction.user.id, match_id)
-    if existing_bets:
-        existing_pick = existing_bets[0]["team_pick"]
-        if existing_pick != team:
-            other_team = match.team1_name if existing_pick == "team1" else match.team2_name
-            await interaction.followup.send(
-                embed=create_embed(
-                    message=f"You already have a pending bet on **{other_team}** for this match! You can't bet on both teams."
-                ),
-                ephemeral=True,
-            )
-            return
-
-    odds = match.team1_odds if team == "team1" else match.team2_odds
-    if odds is None:
-        await interaction.followup.send(
-            embed=create_embed(message="Odds are not available for this match yet. Try again later!"),
-            ephemeral=True,
-        )
-        return
-
-    current_ssc = interaction.data["user_data"]["sail_credit"]
-    if current_ssc < amount:
-        await interaction.followup.send(
-            embed=create_embed(
-                message=f"You don't have enough SSC! You have **{current_ssc} SSC** but tried to bet **{amount} SSC**."
-            ),
-            ephemeral=True,
-        )
-        return
-
-    bet = await vct_service.place_bet(
-        discord_id=interaction.user.id,
-        match=match,
-        team_pick=team,
-        amount=amount,
-    )
-
-    if not bet:
-        await interaction.followup.send(
-            embed=create_embed(message="Something went wrong placing your bet. Please try again!"),
-            ephemeral=True,
-        )
-        return
-
-    new_balance = current_ssc - amount
-
-    await interaction.followup.send(
-        embed=create_bet_confirm_embed(
-            match=match,
-            team_pick=team,
-            amount=amount,
-            odds=bet.odds_at_bet,
-            potential_payout=bet.potential_payout,
-            new_balance=new_balance,
-        ),
+    await MatchBetView.send(
+        interaction, vct_service, "VCT", MIN_BET, create_bet_confirm_embed
     )
 
 
@@ -825,6 +744,94 @@ async def vct_leaderboard(interaction: discord.Interaction):
 
 
 bot.tree.add_command(vct_group)
+
+
+# --- LoL Betting ---
+
+lol_group = app_commands.Group(name="lol", description="Bet on LoL Worlds matches!")
+
+lol_service: Optional[LoLBettingService] = None
+
+
+@lol_group.command(name="matches", description="View LoL Worlds matches and odds.")
+@user_command()
+async def lol_matches(interaction: discord.Interaction):
+    if not lol_service:
+        await interaction.response.send_message(
+            embed=create_embed(message="LoL service is not ready yet. Try again in a moment!"),
+            ephemeral=True,
+        )
+        return
+
+    matches = lol_service.get_matches()
+    if not matches:
+        await interaction.response.send_message(
+            embed=create_embed(
+                message="No LoL matches loaded yet. Polymarket may be unreachable — try again in a minute!"
+            ),
+            ephemeral=True,
+        )
+        return
+
+    pages = lol_views.build_matches_pages(matches)
+    await interaction.response.send_message(embed=pages[0], view=MessageBook(interaction.user.id, pages))
+
+
+@lol_group.command(name="bet", description="Bet SSC on a LoL Worlds match.")
+@user_command()
+async def lol_bet(interaction: discord.Interaction):
+    if not lol_service:
+        await interaction.response.send_message(
+            embed=create_embed(message="LoL service is not ready yet. Try again in a moment!"),
+            ephemeral=True,
+        )
+        return
+
+    await MatchBetView.send(
+        interaction, lol_service, "LoL", LOL_MIN_BET, lol_views.create_bet_confirm_embed
+    )
+
+
+@lol_group.command(name="bets", description="View your LoL betting history.")
+@user_command()
+async def lol_bets(interaction: discord.Interaction):
+    bets = await db.get_user_lol_bets(interaction.user.id)
+    pages = lol_views.build_user_bets_pages(bets)
+    await interaction.response.send_message(embed=pages[0], view=MessageBook(interaction.user.id, pages))
+
+
+@lol_group.command(name="leaderboard", description="LoL betting leaderboard — who's profited the most?")
+@user_command()
+async def lol_leaderboard(interaction: discord.Interaction):
+    rows = await db.get_lol_betting_leaderboard()
+    if not rows:
+        await interaction.response.send_message(
+            embed=create_embed(
+                title="🏆 LoL Betting Leaderboard",
+                message="No resolved bets yet!",
+            ),
+        )
+        return
+
+    lines = []
+    for i, row in enumerate(rows[:15]):
+        rank = i + 1
+        net = int(row["net_profit"])
+        sign = "+" if net >= 0 else ""
+        lines.append(
+            f"**#{rank}** <@{row['discord_id']}> — {sign}{net} SSC "
+            f"({row['wins']}W/{row['losses']}L, {int(row['total_wagered'])} wagered)"
+        )
+
+    await interaction.response.send_message(
+        embed=create_embed(
+            title="🏆 LoL Betting Leaderboard",
+            message="\n".join(lines),
+        ),
+    )
+
+
+bot.tree.add_command(lol_group)
 
 
 @bot.tree.command(
@@ -958,6 +965,10 @@ async def on_ready():
     global vct_service
     vct_service = VCTBettingService()
     await vct_service.start()
+
+    global lol_service
+    lol_service = LoLBettingService()
+    await lol_service.start()
 
     await bot.tree.sync()
 
