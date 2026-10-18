@@ -1,13 +1,14 @@
 import time
 from dataclasses import dataclass
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import db
-from vct.scraper import VLRMatch, scrape_all_match_data, scrape_event_matches, scrape_match_page
+from vct.scraper import VLRMatch, scrape_all_match_data, scrape_match_page
 
-# How often to poll VLR.gg for matches that have active bets (in seconds)
+# How often to poll VLR.gg to refresh matches/odds and resolve bets (in seconds)
 POLL_INTERVAL_SECONDS = 120
 # Minimum bet amount
 MIN_BET = 10
@@ -30,55 +31,56 @@ class VCTBet:
 class VCTBettingService:
     def __init__(self):
         self.scheduler = AsyncIOScheduler(timezone="UTC")
+        # All matches from the last poll, keyed by match ID
+        self.matches: Dict[int, VLRMatch] = {}
 
     async def start(self):
-        """Initialize the service and start polling for active bets."""
+        """Initialize the service and start polling. The first poll runs immediately."""
         self.scheduler.add_job(
-            self._poll_active_bets,
+            self._poll,
             "interval",
             seconds=POLL_INTERVAL_SECONDS,
-            id="vct_poll_active",
+            id="vct_poll",
             replace_existing=True,
+            next_run_time=datetime.now(timezone.utc),
         )
         self.scheduler.start()
         print("VCT Betting Service started!")
 
-    async def fetch_matches(self) -> List[VLRMatch]:
-        """On-demand scrape of all VCT matches. Called when a user runs /vct matches."""
-        try:
-            return await scrape_all_match_data()
-        except Exception as e:
-            print(f"VCT fetch_matches error: {e}")
-            return []
+    def get_matches(self) -> List[VLRMatch]:
+        """All matches from the last poll. Used for display only — bets use get_match()."""
+        return list(self.matches.values())
 
     async def get_match(self, match_id: int) -> Optional[VLRMatch]:
-        """Scrape a single match page for current data."""
+        """Scrape a single match page for current data, so bets lock in fresh odds."""
         try:
             return await scrape_match_page(match_id)
         except Exception as e:
             print(f"VCT get_match error: {e}")
             return None
 
-    async def _poll_active_bets(self):
-        """Only poll VLR.gg for matches that have pending bets, to check for results."""
+    async def get_user_pending_bets_for_match(
+        self, discord_id: int, match_id: int
+    ) -> List[Dict[str, Any]]:
+        return await db.get_user_pending_bets_for_match(discord_id, match_id)
+
+    async def _poll(self):
+        """Refresh all matches and odds from VLR.gg, then resolve any finished bets."""
         try:
+            matches = await scrape_all_match_data()
+            if matches:
+                self.matches = {m.match_id: m for m in matches}
+
             matches_with_bets = await db.get_matches_with_pending_bets()
-            if not matches_with_bets:
-                return
+            for row in matches_with_bets:
+                match = self.matches.get(row["match_id"])
+                if match and match.status == "completed" and match.winner:
+                    await self._resolve_match_bets(match)
 
-            match_ids = {row["match_id"] for row in matches_with_bets}
-
-            # Scrape the event page to get current status/results
-            scraped_matches = await scrape_event_matches()
-
-            for scraped in scraped_matches:
-                if scraped.match_id not in match_ids:
-                    continue
-
-                if scraped.status == "completed" and scraped.winner:
-                    await self._resolve_match_bets(scraped)
-
-            print(f"VCT poll: checked {len(match_ids)} match(es) with active bets")
+            print(
+                f"VCT poll: refreshed {len(matches)} match(es), "
+                f"checked {len(matches_with_bets)} with active bets"
+            )
         except Exception as e:
             print(f"VCT poll error: {e}")
 
