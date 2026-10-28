@@ -7,7 +7,11 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 VLR_BASE_URL = "https://www.vlr.gg"
-VCT_CHAMPIONS_EVENT_ID = 2766
+# VLR.gg event IDs to offer betting on, with the display name for each
+VCT_EVENTS: Dict[int, str] = {
+    3186: "Kickoff NA Open Qualifier",
+    3179: "Kickoff NA Qualifier Playoffs",
+}
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 
@@ -54,8 +58,16 @@ def _parse_match_id_from_href(href: str) -> Optional[int]:
 
 
 async def scrape_event_matches() -> List[VLRMatch]:
-    """Scrape all matches from the VCT Champions event page."""
-    url = f"{VLR_BASE_URL}/event/matches/{VCT_CHAMPIONS_EVENT_ID}/valorant-champions-2026/?series_id=all"
+    """Scrape all matches from every event in VCT_EVENTS."""
+    matches = []
+    for event_id, event_name in VCT_EVENTS.items():
+        matches.extend(await _scrape_single_event(event_id, event_name))
+    return matches
+
+
+async def _scrape_single_event(event_id: int, event_name: str) -> List[VLRMatch]:
+    """Scrape all matches from one VLR.gg event page. Events with no matches yet return []."""
+    url = f"{VLR_BASE_URL}/event/matches/{event_id}/?series_id=all"
     html = await _fetch_page(url)
     if not html:
         return []
@@ -127,7 +139,9 @@ async def scrape_event_matches() -> List[VLRMatch]:
 
         # Series/stage info
         series_el = item.select_one(".match-item-event-series")
-        series_name = series_el.get_text(strip=True) if series_el else ""
+        stage = series_el.get_text(strip=True) if series_el else ""
+        # Prefix with the event so matches from different events can be told apart
+        series_name = f"{event_name} · {stage}" if stage else event_name
 
         vlr_match = VLRMatch(
             match_id=match_id,
@@ -137,7 +151,7 @@ async def scrape_event_matches() -> List[VLRMatch]:
             team2_score=team2_score,
             status=status,
             winner=winner,
-            event_name="Valorant Champions 2026",
+            event_name=event_name,
             series_name=series_name,
             match_url=f"{VLR_BASE_URL}{href}",
         )
@@ -271,7 +285,7 @@ async def scrape_match_page(match_id: int) -> Optional[VLRMatch]:
 
 async def scrape_all_match_data() -> List[VLRMatch]:
     """
-    Scrape all VCT Champions matches from the event page,
+    Scrape all matches from the VCT_EVENTS event pages,
     then fetch odds for upcoming matches from individual pages.
     """
     matches = await scrape_event_matches()

@@ -41,8 +41,8 @@ def build_matches_pages(
     if not all_matches:
         return [
             create_embed(
-                title="🏆 VCT Champions 2026 — Matches",
-                message="No matches found! Try again later.",
+                title="🏆 VCT — Matches",
+                message="No matches scheduled yet! Check back once the bracket is out.",
             )
         ]
 
@@ -75,7 +75,7 @@ def build_matches_pages(
 
         pages.append(
             create_embed(
-                title="🏆 VCT Champions 2026 — Matches",
+                title="🏆 VCT — Matches",
                 message="\n".join(lines),
             )
         )

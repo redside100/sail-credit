@@ -660,12 +660,12 @@ bot.tree.add_command(casino_group)
 
 # --- VCT Betting ---
 
-vct_group = app_commands.Group(name="vct", description="Bet on VCT Champions matches!")
+vct_group = app_commands.Group(name="vct", description="Bet on VCT matches!")
 
 vct_service: Optional[VCTBettingService] = None
 
 
-@vct_group.command(name="matches", description="View upcoming VCT Champions matches and odds.")
+@vct_group.command(name="matches", description="View upcoming VCT matches and odds.")
 @user_command()
 async def vct_matches(interaction: discord.Interaction):
     if not vct_service:
@@ -675,17 +675,8 @@ async def vct_matches(interaction: discord.Interaction):
         )
         return
 
-    matches = vct_service.get_matches()
-    if not matches:
-        await interaction.response.send_message(
-            embed=create_embed(
-                message="No VCT matches loaded yet. VLR.gg may be unreachable — try again in a minute!"
-            ),
-            ephemeral=True,
-        )
-        return
-
-    pages = build_matches_pages(matches)
+    # An empty list is normal before an event's bracket is published; the pages show an empty state
+    pages = build_matches_pages(vct_service.get_matches())
     await interaction.response.send_message(embed=pages[0], view=MessageBook(interaction.user.id, pages))
 
 
@@ -763,9 +754,12 @@ async def lol_matches(interaction: discord.Interaction):
         )
         return
 
+    await interaction.response.defer()
+    await lol_service.refresh_odds()
+
     matches = lol_service.get_matches()
     if not matches:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=create_embed(
                 message="No LoL matches loaded yet. Polymarket may be unreachable — try again in a minute!"
             ),
@@ -774,7 +768,7 @@ async def lol_matches(interaction: discord.Interaction):
         return
 
     pages = lol_views.build_matches_pages(matches)
-    await interaction.response.send_message(embed=pages[0], view=MessageBook(interaction.user.id, pages))
+    await interaction.followup.send(embed=pages[0], view=MessageBook(interaction.user.id, pages))
 
 
 @lol_group.command(name="bet", description="Bet SSC on a LoL Worlds match.")

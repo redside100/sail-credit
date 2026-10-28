@@ -51,6 +51,9 @@ class VCTBettingService:
         """All matches from the last poll. Used for display only — bets use get_match()."""
         return list(self.matches.values())
 
+    async def refresh_odds(self):
+        """No-op: VLR odds need one page scrape per match, so they only refresh on the poll."""
+
     async def get_match(self, match_id: int) -> Optional[VLRMatch]:
         """Scrape a single match page for current data, so bets lock in fresh odds."""
         try:

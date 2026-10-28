@@ -774,6 +774,10 @@ class MatchBetView(discord.ui.View):
         create_confirm_embed,
     ):
         """Open the bet slip for every match that's currently open for betting."""
+        # Fetching live odds can take a moment, so acknowledge the command first
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        await service.refresh_odds()
+
         matches = sorted(
             (
                 m
@@ -785,7 +789,7 @@ class MatchBetView(discord.ui.View):
         )[:25]
 
         if not matches:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=create_embed(
                     message=f"No {game_name} matches are open for betting right now. Check back later!"
                 ),
@@ -794,7 +798,7 @@ class MatchBetView(discord.ui.View):
             return
 
         view = cls(interaction, service, game_name, min_bet, matches, create_confirm_embed)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=view.build_embed(), view=view, ephemeral=True
         )
 
@@ -890,9 +894,16 @@ class MatchBetView(discord.ui.View):
         )
 
     async def select_match(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        # Odds may have moved since the slip opened. The poll may also have replaced the match
+        # objects since then, so read the latest ones back from the service.
+        await self.service.refresh_odds()
+        for match in self.service.get_matches():
+            if match.match_id in self.matches:
+                self.matches[match.match_id] = match
         self.selected_match = self.matches.get(int(self.select.values[0]))
         self._build_items()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await interaction.edit_original_response(embed=self.build_embed(), view=self)
 
     async def place_bet(
         self,

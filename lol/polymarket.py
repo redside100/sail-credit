@@ -1,11 +1,13 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 
 POLYMARKET_API_URL = "https://gamma-api.polymarket.com"
+# Live order book. Gamma responses are CDN-cached for up to 5 minutes, so prices come from here instead.
+POLYMARKET_CLOB_URL = "https://clob.polymarket.com"
 POLYMARKET_BASE_URL = "https://polymarket.com"
 WORLDS_TAG_SLUG = "lol-worlds-2026"
 PAGE_LIMIT = 100
@@ -25,6 +27,10 @@ class LoLMatch:
     team2_score: Optional[int] = None
     series_name: str = ""
     match_url: str = ""
+    # CLOB token IDs for the match winner market, used to fetch live prices
+    token_ids: List[str] = field(default_factory=list)
+    # CLOB condition ID for the match winner market, used to check for a result
+    condition_id: str = ""
 
 
 async def _fetch_json(path: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
@@ -40,6 +46,27 @@ async def _fetch_json(path: str, params: Optional[Dict[str, Any]] = None) -> Opt
     except Exception as e:
         print(f"Polymarket: error fetching {url}: {e}")
         return None
+
+
+async def _fetch_midpoints(token_ids: List[str]) -> Dict[str, str]:
+    """Fetch live midpoint prices from the CLOB in one request. Tokens with no order book are omitted."""
+    if not token_ids:
+        return {}
+    url = f"{POLYMARKET_CLOB_URL}/midpoints"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json=[{"token_id": t} for t in token_ids],
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                print(f"Polymarket: got status {resp.status} for {url}")
+                return {}
+    except Exception as e:
+        print(f"Polymarket: error fetching {url}: {e}")
+        return {}
 
 
 def _price_to_odds(price: str) -> Optional[float]:
@@ -77,6 +104,7 @@ def _parse_event(event: Dict[str, Any]) -> Optional[LoLMatch]:
     try:
         outcomes = json.loads(moneyline.get("outcomes") or "[]")
         prices = json.loads(moneyline.get("outcomePrices") or "[]")
+        token_ids = json.loads(moneyline.get("clobTokenIds") or "[]")
     except json.JSONDecodeError:
         return None
     if len(outcomes) != 2 or len(prices) != 2:
@@ -132,11 +160,60 @@ def _parse_event(event: Dict[str, Any]) -> Optional[LoLMatch]:
         team2_score=team2_score,
         series_name=f"Worlds {stage}" if stage else "Worlds",
         match_url=f"{POLYMARKET_BASE_URL}/event/{event.get('slug', '')}",
+        token_ids=token_ids if len(token_ids) == 2 else [],
+        condition_id=moneyline.get("conditionId") or "",
     )
 
 
+async def fetch_winner(match: LoLMatch) -> Optional[str]:
+    """
+    Check the live order book for the match winner. Returns "team1", "team2", or None if undecided.
+    Unlike Gamma this isn't cached, so results show up as soon as Polymarket settles the market.
+    """
+    if not match.condition_id or not match.token_ids:
+        return None
+    url = f"{POLYMARKET_CLOB_URL}/markets/{match.condition_id}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status != 200:
+                    print(f"Polymarket: got status {resp.status} for {url}")
+                    return None
+                market = await resp.json()
+    except Exception as e:
+        print(f"Polymarket: error fetching {url}: {e}")
+        return None
+
+    for token in market.get("tokens", []):
+        if token.get("winner") is True:
+            if token.get("token_id") == match.token_ids[0]:
+                return "team1"
+            if token.get("token_id") == match.token_ids[1]:
+                return "team2"
+    return None
+
+
+async def refresh_odds(matches: List[LoLMatch]) -> None:
+    """
+    Overwrite odds on open matches with live order book prices.
+    The two outcomes are complementary, so team2's price is 1 - team1's.
+    Matches whose order book can't be read keep their Gamma odds.
+    """
+    open_matches = [
+        m for m in matches if m.status in ("upcoming", "live") and m.token_ids
+    ]
+    midpoints = await _fetch_midpoints([m.token_ids[0] for m in open_matches])
+    for match in open_matches:
+        try:
+            price = float(midpoints[match.token_ids[0]])
+        except (KeyError, TypeError, ValueError):
+            continue
+        match.team1_odds = _price_to_odds(str(price))
+        match.team2_odds = _price_to_odds(str(1 - price))
+
+
 async def fetch_worlds_matches() -> List[LoLMatch]:
-    """Fetch all LoL Worlds 2026 matches that have a match winner market."""
+    """Fetch all LoL Worlds 2026 matches that have a match winner market, with live odds."""
     matches = []
     offset = 0
     while True:
@@ -156,15 +233,19 @@ async def fetch_worlds_matches() -> List[LoLMatch]:
             break
         offset += PAGE_LIMIT
 
+    await refresh_odds(matches)
     return matches
 
 
 async def fetch_match(match_id: int) -> Optional[LoLMatch]:
-    """Fetch a single match by its Polymarket event ID."""
+    """Fetch a single match by its Polymarket event ID, with live odds."""
     event = await _fetch_json(f"/events/{match_id}")
     if not event:
         return None
     # Only allow Worlds matches, not any Polymarket event ID
     if not any(tag.get("slug") == WORLDS_TAG_SLUG for tag in event.get("tags", [])):
         return None
-    return _parse_event(event)
+    match = _parse_event(event)
+    if match:
+        await refresh_odds([match])
+    return match
