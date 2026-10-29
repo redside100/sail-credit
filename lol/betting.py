@@ -6,7 +6,13 @@ from typing import Any, Dict, List, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import db
-from lol.polymarket import LoLMatch, fetch_match, fetch_worlds_matches
+from lol.polymarket import (
+    LoLMatch,
+    fetch_match,
+    fetch_winner,
+    fetch_worlds_matches,
+    refresh_odds,
+)
 
 # How often to poll Polymarket to refresh matches/odds and resolve bets (in seconds)
 POLL_INTERVAL_SECONDS = 120
@@ -51,6 +57,13 @@ class LoLBettingService:
         """All matches from the last poll. Used for display only — bets use get_match()."""
         return list(self.matches.values())
 
+    async def refresh_odds(self):
+        """Update in-memory odds from the live order book. One request, so it's cheap to call per command."""
+        try:
+            await refresh_odds(list(self.matches.values()))
+        except Exception as e:
+            print(f"LoL refresh_odds error: {e}")
+
     async def get_match(self, match_id: int) -> Optional[LoLMatch]:
         """Fetch a single match for current data, so bets lock in fresh odds."""
         try:
@@ -76,6 +89,15 @@ class LoLBettingService:
                 match = self.matches.get(row["match_id"]) or await fetch_match(row["match_id"])
                 if not match:
                     continue
+
+                # Gamma (the match list) is CDN-cached for up to 5 minutes, so check the
+                # live order book for a winner first instead of waiting for Gamma to catch up.
+                if not match.winner:
+                    winner = await fetch_winner(match)
+                    if winner:
+                        match.winner = winner
+                        match.status = "completed"
+                        match.team1_odds = match.team2_odds = None
 
                 if match.status == "completed" and match.winner:
                     await self._resolve_match_bets(match)
